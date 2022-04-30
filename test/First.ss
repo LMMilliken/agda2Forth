@@ -2,58 +2,50 @@
 
 (define (A) (begin (display "encountered axiom: A\n") (exit 1)))
 
-(define (id) (lambda (a) (force a)))
+(define (id) (lambda (a) a))
 
 (define (true) (list 'true))
 
 (define (false) (list 'false))
 
-(define (not) (lambda (a) (record-case (force a) ((true) () (false))
+(define (not) (lambda (a) (record-case a ((true) () (false))
 ((false) () (true)))))
 
 (define 
   (ite)
-  (lambda 
-    (a)
-    (lambda 
-      (b)
-      (lambda (c) (lambda (d) (record-case (force b) ((true) () (force c))
-((false) () (force d))))))))
+  (lambda (a) (lambda (b) (lambda (c) (lambda (d) (record-case b ((true) () c)
+((false) () d)))))))
 
 (define (loop) (loop))
 
-(define (test1) (((((ite) (delay (list))) (delay (false))) (delay (loop))) (delay (true))))
+(define (test1) (((((ite) (list)) (false)) (loop)) (true)))
 
 (define (zero) (list 'zero))
 
 (define (suc) (lambda (a) (list 'suc a)))
 
-(define (one) ((suc) (delay (zero))))
+(define (one) ((suc) (zero)))
 
-(define (two) ((suc) (delay (one))))
+(define (two) ((suc) (one)))
 
-(define (three) ((suc) (delay (two))))
+(define (three) ((suc) (two)))
 
-(define (pred) (lambda (a) (record-case (force a) ((zero) () (force a))
-((suc) (b) (force b)))))
+(define (pred) (lambda (a) (record-case a ((zero) () a)
+((suc) (b) b))))
 
-(define 
-  (_+_)
-  (lambda (a) (lambda (b) (record-case (force a) ((zero) () (force b))
-((suc) (c) ((suc) (delay (((_+_) c) b))))))))
+(define (_+_) (lambda (a) (lambda (b) (record-case a ((zero) () b)
+((suc) (c) ((suc) (((_+_) c) b)))))))
 
-(define 
-  (twice)
-  (lambda (a) (record-case (force a) ((zero) () (force a))
-((suc) (b) ((suc) (delay ((suc) (delay ((twice) b)))))))))
+(define (twice) (lambda (a) (record-case a ((zero) () a)
+((suc) (b) ((suc) ((suc) ((twice) b)))))))
 
-(define (pow2) (lambda (a) (record-case (force a) ((zero) () ((suc) a))
-((suc) (b) ((twice) (delay ((pow2) b)))))))
+(define (pow2) (lambda (a) (record-case a ((zero) () ((suc) a))
+((suc) (b) ((twice) ((pow2) b))))))
 
-(define (consume) (lambda (a) (record-case (force a) ((zero) () (force a))
+(define (consume) (lambda (a) (record-case a ((zero) () a)
 ((suc) (b) ((consume) b)))))
 
-(define (test2) ((consume) (delay ((pow2) (delay ((twice) (delay ((twice) (delay ((twice) (delay (three))))))))))))
+(define (test2) ((consume) ((pow2) ((twice) ((twice) ((twice) (three)))))))
 
 (define (nil) (list 'nil))
 
@@ -61,9 +53,9 @@
 b
 c)))))
 
-(define (head) (lambda (a) (lambda (b) (lambda (c) (record-case (force c) ((con) (d e f) (force e)))))))
+(define (head) (lambda (a) (lambda (b) (lambda (c) (record-case c ((con) (d e f) e))))))
 
-(define (tail) (lambda (a) (lambda (b) (lambda (c) (record-case (force c) ((con) (d e f) (force f)))))))
+(define (tail) (lambda (a) (lambda (b) (lambda (c) (record-case c ((con) (d e f) f))))))
 
 (define 
   (map)
@@ -77,27 +69,15 @@ c)))))
           (d)
           (lambda 
             (e)
-            (record-case 
-              (force e)
-              ((nil) () (force e))
-              ((con) 
-                (f g h)
-                ((((con) f) (delay ((force d) g))) 
-                  (delay ((((((map) (delay (list))) (delay (list))) (delay (list))) d) h)))))))))))
+            (record-case e ((nil) () e)
+((con) (f g h) ((((con) f) (d g)) ((((((map) (list)) (list)) (list)) d) h))))))))))
 
 (define 
   (test3)
-  ((((head) (delay (list))) (delay (list))) 
-    (delay 
-      ((((tail) (delay (list))) (delay (list))) 
-        (delay 
-          ((((((map) (delay (list))) (delay (list))) (delay (list))) (delay (suc))) 
-            (delay 
-              ((((con) (delay ((suc) (delay ((suc) (delay (zero))))))) (delay (zero))) 
-                (delay 
-                  ((((con) (delay ((suc) (delay (zero))))) (delay ((suc) (delay (zero))))) 
-                    (delay 
-                      ((((con) (delay (zero))) (delay ((suc) (delay ((suc) (delay (zero))))))) (delay (nil))))))))))))))
+  ((((head) (list)) (list)) 
+    ((((tail) (list)) (list)) 
+      ((((((map) (list)) (list)) (list)) (suc)) 
+        ((((con) ((suc) ((suc) (zero)))) (zero)) ((((con) ((suc) (zero))) ((suc) (zero))) ((((con) (zero)) ((suc) ((suc) (zero)))) (nil))))))))
 
 (define (z123\x27;\x23;\x7C;H\x5C;x65llo) (zero))
 
@@ -105,9 +85,6 @@ c)))))
 
 (define (fie) (lambda (a) ((suc) a)))
 
-(define (foe) (lambda (a) ((suc) (delay ((fie) a)))))
+(define (foe) (lambda (a) ((suc) ((fie) a))))
 
-(define 
-  (fun)
-  (((_+_) (delay ((fie) (delay ((suc) (delay ((suc) (delay (zero))))))))) 
-    (delay ((foe) (delay ((suc) (delay ((suc) (delay (zero))))))))))
+(define (fun) (((_+_) ((fie) ((suc) ((suc) (zero))))) ((foe) ((suc) ((suc) (zero))))))

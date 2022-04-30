@@ -1,5 +1,3 @@
-(import (only (chezscheme) record-case))
-
 (define (Level) (begin (display "encountered axiom: Level\n") (exit 1)))
 
 (define (lzero) (begin (display "encountered axiom: lzero\n") (exit 1)))

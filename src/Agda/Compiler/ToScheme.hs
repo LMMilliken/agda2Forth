@@ -47,6 +47,13 @@ schDefine :: SchAtom -> SchForm -> SchForm
 schDefine f body = RSList
   ["define", RSList [RSAtom f], body]
 
+fthDefineType :: SchAtom -> SchForm -> SchForm
+fthDefineType f body = RSAtom
+  (T.concat [T.pack "variable ", f])
+
+-- >>> :t T.pack "variable"
+-- T.pack "variable" :: Text
+
 schError :: Text -> SchForm
 schError msg = RSList
   [ "begin"
@@ -315,7 +322,7 @@ instance ToScheme Definition (Maybe SchForm) where
         let c = conName chead
         c' <- toScheme c
         withFreshVars nargs $ \xs ->
-          return $ Just $ schDefine c' $ schLambdas xs $ schConApp c $ map RSAtom xs
+          return $ Just $ schDefine c' (schLambdas xs (schConApp c (map RSAtom xs)))
 
       AbstractDefn{} -> __IMPOSSIBLE__
       DataOrRecSig{} -> __IMPOSSIBLE__

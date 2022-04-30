@@ -7,7 +7,8 @@ import Agda.Compiler.Common
 
 import Agda.Main ( runAgda )
 
-import Agda.Compiler.ToScheme
+-- import Agda.Compiler.ToScheme
+import Agda.Compiler.ToForth
 
 import Agda.Interaction.Options ( OptDescr(..) , ArgDescr(..) )
 
@@ -80,8 +81,8 @@ schCompileDef opts _ isMain def =
 schPostModule :: IsMain -> ModuleName -> [Maybe SchForm] -> TCM ()
 schPostModule isMain modName defs = do
   let defToText = encodeOne printer . fromRich
-      modText   = T.intercalate "\n\n" $ map defToText $ schPreamble : catMaybes defs
-      fileName  = prettyShow (last $ mnameToList modName) ++ ".ss"
+      modText   = T.intercalate "\n\n" $ map defToText $ catMaybes defs
+      fileName  = prettyShow (last $ mnameToList modName) ++ ".fth"
   liftIO $ T.writeFile fileName modText
 
   where
