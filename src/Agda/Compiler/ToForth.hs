@@ -65,7 +65,8 @@ schDefine f body = RSList
 
 fthWord :: SchAtom -> SchForm -> SchForm
 fthWord f body = RSAtom (
-  T.pack (": " ++ T.unpack f ++ " " ++ T.unpack (formToAtom (replaceF f body)) ++ " ;"))
+  T.pack ("defer " ++ T.unpack f ++ "\nvariable XT"++ T.unpack f ++"\n:noname "++ " " ++ T.unpack (formToAtom body) ++
+  " ; XT" ++ T.unpack f ++ " !\n:noname" ++ " XT" ++ T.unpack f ++ " @ makeTHUNK ; is " ++ T.unpack f))
   where
     replaceF :: SchAtom -> SchForm -> SchForm
     replaceF f (RSAtom word)
@@ -88,9 +89,9 @@ fthPrinter f = T.concat [
   ]
 
 fthConstructor :: SchAtom -> Int -> SchAtom
-fthConstructor f args = T.pack
-    (": " ++ T.unpack f ++" type" ++ T.unpack f ++  " here "
-    ++ show (args + 1) ++ " fillArray here " ++ show (args + 1) ++ " cells allot ;")
+fthConstructor f args = formToAtom $ fthWord f (RSAtom $ T.pack
+    (" type" ++ T.unpack f ++  " here "
+    ++ show (args + 1) ++ " fillArray here " ++ show (args + 1) ++ " cells allot"))
 
 -- >>> :t T.pack "variable"
 -- T.pack "variable" :: Text
@@ -124,14 +125,14 @@ schApp :: SchForm -> [SchForm] -> SchForm
 schApp f vs = RSList (vs ++ [f])
 
 fthApp :: SchForm -> [SchForm] -> SchForm
-fthApp f args = RSList (args ++ [f, " curry "])
+fthApp f args = RSList (args ++ [f, " pass "])
 
 -- Apply to each argument individually instead of all at once.
 schApps :: SchForm -> [SchForm] -> SchForm
 schApps = foldl (\x y -> schApp x [y])
 
 fthApps :: SchForm -> [SchForm] -> SchForm
-fthApps = foldl (\x y -> schApp x [y])
+fthApps = foldl (\x y -> fthApp x [y])
 
 schLet :: [(SchAtom,SchForm)] -> SchForm -> SchForm
 schLet binds body = RSList
@@ -171,7 +172,7 @@ fthPatternMatch x cases maybeFallback  = RSList
       makeForthy arg (RSList [pat, RSList wildcards, expr]:xs) fallback = T.concat [
         T.concat [
           formToAtom arg,
-          T.concat (map (\x -> T.pack "makeWILDCARD ") wildcards ++ [formToAtom pat]),
+          T.concat (map (\x -> T.pack "makeWILDCARD ") wildcards ++ [formToAtom pat] ++ map (\x -> T.pack "pass ") wildcards),
           T.pack "0 pointer !",
           T.concat (T.pack (" obj= if wildcards " ++ show (length wildcards) ++ " pushArray { ") : map formToAtom wildcards ++ [T.pack "} "] ++ [T.pack newLine]),
           formToAtom expr
@@ -188,6 +189,9 @@ fthPatternMatch x cases maybeFallback  = RSList
 
 schUnit :: SchForm
 schUnit = RSList [RSAtom "list"]
+
+fthUnit :: SchForm
+fthUnit = RSList [RSAtom "0"]
 
 schDelay :: EvaluationStrategy -> SchForm -> SchForm
 schDelay EagerEvaluation x = x
@@ -244,19 +248,7 @@ freshVars = concat [ map (<> i) xs | i <- "":map (T.pack . show) [1..] ]
 -- These are names that should not be used by the code we generate
 reservedNames :: Set SchAtom
 reservedNames = Set.fromList $ map T.pack
-  [ "define" , "lambda", "let", "let*", "letrec", "letrec*"
-  , "let-values", "let*-values", "case"
-  , "record-case", "else"
-  , "let-syntax", "letrec-syntax"
-  , "define-syntax", "syntax-rules"
-  , "#t" , "#f" , "if" , "=", "eqv?"
-  , "+", "-", "*", "/"
-  , "list", "car", "cdr"
-  , "vector-ref", "string-ref"
-  , "begin", "display", "put-bytes", "exit"
-  , "library", "import", "export", "only"
-  , "force", "delay"
-  , "call-with-values", "call-with-current-continuation"
+  [ "loop"
   -- TODO: add more
   ]
 
@@ -417,7 +409,7 @@ instance ToScheme TTerm SchForm where
       f' <- toScheme f
       strat <- getEvaluationStrategy
       args' <- map (schDelay strat) <$> traverse toScheme args
-      return $ schApps f' args'
+      return $ fthApps f' args'
     TLam v -> withFreshVar $ \x -> do
       body <- toScheme v
       return $ fthLocal [x] body
@@ -438,9 +430,9 @@ instance ToScheme TTerm SchForm where
                   then return Nothing
                   else Just <$> toScheme v
       return $ fthPatternMatch x cases fallback
-    TUnit -> return schUnit
-    TSort -> return schUnit
-    TErased -> return schUnit
+    TUnit -> return fthUnit
+    TSort -> return fthUnit
+    TErased -> return fthUnit
     TCoerce u -> toScheme u
     TError err -> toScheme err
 
