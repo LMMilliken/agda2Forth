@@ -77,7 +77,7 @@ schCompileDef opts _ isMain def = runToSchemeM opts $ toScheme def
 
 schPostModule :: SchOptions -> () -> IsMain -> ModuleName -> [Maybe SchForm] -> TCM ()
 schPostModule opts _ isMain modName defs = do
-  preamble <- runToSchemeM opts schPreamble
+  preamble <- runToSchemeM opts fthPreamble
   let defToText = encodeOne printer . fromRich
       modText   = T.intercalate "\n\n" $ map defToText $ preamble ++ catMaybes defs
       fileName  = prettyShow (last $ mnameToList modName) ++ ".fth"

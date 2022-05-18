@@ -84,3 +84,4 @@ open M (suc (suc zero))
 
 fun : Nat
 fun = fie + foe
+ 

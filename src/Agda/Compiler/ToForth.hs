@@ -114,6 +114,7 @@ schLambda args body = RSList
   , body
   ]
 
+
 fthLocal :: [SchAtom] -> SchForm -> SchForm
 fthLocal args body = RSAtom $ T.pack $
   "{ " ++ concatMap (\arg -> T.unpack arg ++ " ") args ++ "} " ++ newLine ++ T.unpack (formToAtom body)
@@ -137,6 +138,11 @@ schApps = foldl (\x y -> schApp x [y])
 
 fthApps :: SchForm -> [SchForm] -> SchForm
 fthApps = foldl (\x y -> fthApp x [y])
+
+fthLet :: [(SchAtom,SchForm)] -> SchForm -> SchForm
+fthLet binds body = RSAtom $ T.pack $
+  concatMap (\(x,v) -> T.unpack (formToAtom v) ++ "{ " ++ T.unpack x ++ " " ++ "} ") binds
+  ++ T.unpack (formToAtom body)
 
 schLet :: [(SchAtom,SchForm)] -> SchForm -> SchForm
 schLet binds body = RSList
@@ -202,11 +208,36 @@ schDelay x
   | RSList [RSAtom "force", y] <- x = y
   | otherwise                       = RSList [RSAtom "delay", x]
 
+fthDelay :: SchForm -> SchForm
+fthDelay x
+  | RSList [y, RSAtom "dethunk"] <- x = y
+  | otherwise                       = RSList [x, RSAtom "makeTHUNK"]
+
 schForce :: SchForm -> SchForm
 schForce x
   | RSList [RSAtom "delay", y] <- x = y
   | otherwise                       = RSList [RSAtom "force", x]
 
+fthForce :: SchForm -> SchForm
+fthForce x = RSList [x, RSAtom "dethunk"]
+
+schAdd, schSub, schMul, schQuot, schRem, schIf, schEq :: SchForm
+schAdd  = RSList [RSAtom "add"]
+schSub  = RSList [RSAtom "sub"]
+schMul  = RSList [RSAtom "mul"]
+schQuot = RSList [RSAtom "quot"]
+schRem  = RSList [RSAtom "rem"]
+schIf   = RSList [RSAtom "iff"]
+schEq   = RSList [RSAtom "eq"]
+
+fthAdd, fthSub, fthMul, fthQuot, fthRem, fthIf, fthEq :: SchForm
+fthAdd  = RSList [RSAtom "add"]
+fthSub  = RSList [RSAtom "sub"]
+fthMul  = RSList [RSAtom "mul"]
+fthQuot = RSList [RSAtom "quot"]
+fthRem  = RSList [RSAtom "rem"]
+fthIf   = RSList [RSAtom "iff"]
+fthEq   = RSList [RSAtom "eq"]
 
 schPreamble :: ToSchemeM [SchForm]
 schPreamble = do
@@ -229,17 +260,13 @@ fthPreamble :: ToSchemeM [SchForm]
 fthPreamble = do
   force <- makeForce
   return
-    [ RSList
-      [ RSAtom "import"
-      , RSList [ RSAtom "only" , RSList [RSAtom "chezscheme"] , RSAtom "record-case" ]
-      ]
-    , fthWord "add"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [RSAtom "+", force (RSAtom "m"), force (RSAtom "n")]
-    , fthWord "sub"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [RSAtom "-", force (RSAtom "m"), force (RSAtom "n")]
-    , fthWord "mul"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [RSAtom "*", force (RSAtom "m"), force (RSAtom "n")]
-    , fthWord "quot" $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [RSAtom "div", force (RSAtom "m"), force (RSAtom "n")]
-    , fthWord "rem"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [RSAtom "mod", force (RSAtom "m"), force (RSAtom "n")]
-    , fthWord "iff"  $ fthLocals ["b","x","y"] $ RSAtom $ formToAtom $ RSList [RSAtom "if", force (RSAtom "b"), force (RSAtom "x"), force (RSAtom "y")]
-    , fthWord "eq"   $ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [RSAtom "=", force (RSAtom "x"), force (RSAtom "y")]
+    [ fthWord "add"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m dethunk"), force (RSAtom "n dethunk"), RSAtom "+"]
+    , fthWord "sub"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m dethunk"), force (RSAtom "n dethunk"), RSAtom "-"]
+    , fthWord "mul"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m dethunk"), force (RSAtom "n dethunk"), RSAtom "*"]
+    , fthWord "quot" $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m dethunk"), force (RSAtom "n dethunk"), RSAtom "/"]
+    , fthWord "rem"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m dethunk"), force (RSAtom "n dethunk"), RSAtom "mod"]
+    , fthWord "iff"  $ fthLocals ["b","x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "b dethunk"), RSAtom "if", force (RSAtom "x dethunk"), RSAtom "else", force (RSAtom "y dethunk"), RSAtom "then"]
+    , fthWord "eq"   $ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "x dethunk"), force (RSAtom "y dethunk"), RSAtom "="]
     ]
 
 deriving instance Generic EvaluationStrategy
@@ -313,18 +340,20 @@ getEvaluationStrategy :: ToSchemeM EvaluationStrategy
 getEvaluationStrategy = reader $ schEvaluation . toSchemeOptions
 
 makeDelay :: ToSchemeM (SchForm -> SchForm)
-makeDelay = do
-  strat <- getEvaluationStrategy
-  case strat of
-    EagerEvaluation -> return id
-    LazyEvaluation  -> return schDelay
+makeDelay = return id
+  -- do
+  -- strat <- getEvaluationStrategy
+  -- case strat of
+  --   EagerEvaluation -> return id
+  --   LazyEvaluation  -> return fthDelay
 
 makeForce :: ToSchemeM (SchForm -> SchForm)
-makeForce = do
-  strat <- getEvaluationStrategy
-  case strat of
-    EagerEvaluation -> return id
-    LazyEvaluation  -> return schForce
+makeForce = return id
+  -- do
+  -- strat <- getEvaluationStrategy
+  -- case strat of
+  --   EagerEvaluation -> return id
+  --   LazyEvaluation  -> return fthForce
 
 getVarName :: Int -> ToSchemeM SchAtom
 getVarName i = reader $ (!! i) . toSchemeVars
@@ -447,7 +476,7 @@ instance ToScheme Definition (Maybe SchForm) where
 
 
 instance ToScheme TTerm SchForm where
-  toScheme v = do 
+  toScheme v = do
     v <- liftTCM $ eliminateLiteralPatterns v
     case v of
       TVar i -> do
@@ -474,7 +503,7 @@ instance ToScheme TTerm SchForm where
         expr <- toScheme u
         withFreshVar $ \x -> do
           body <- toScheme v
-          return $ schLet [(x,expr)] body
+          return $ fthLet [(x,expr)] body
       TCase i info v bs -> do
         force <- makeForce
         x <- force . RSAtom <$> getVarName i
@@ -493,10 +522,26 @@ instance ToScheme TTerm SchForm where
       isUnreachable v = v == TError TUnreachable
 
 instance ToScheme TPrim SchForm where
-  toScheme p = undefined
+  toScheme p = case p of
+    PAdd  -> return fthAdd
+    PSub  -> return fthSub
+    PMul  -> return fthMul
+    PQuot -> return fthQuot
+    PRem  -> return fthRem
+    PIf   -> return fthIf
+    PEqI  -> return fthEq
+    _     -> return $ schError $ T.pack $ "not yet supported: primitive " ++ show p
 
 instance ToScheme Literal SchForm where
-  toScheme lit = undefined
+  toScheme lit = case lit of
+    LitNat    x -> return $ RSAtom (T.pack (show x))
+    LitWord64 x -> return $ schError "not yet supported: Word64 literals"
+    LitFloat  x -> return $ schError "not yet supported: Float literals"
+    LitString x -> return $ schError "not yet supported: String literals"
+    LitChar   x -> return $ schError "not yet supported: Char literals"
+    LitQName  x -> return $ schError "not yet supported: QName literals"
+    LitMeta p x -> return $ schError "not yet supported: Meta literals"
+
 
 -- TODO: allow literal branches and guard branches
 instance ToScheme TAlt SchForm where
