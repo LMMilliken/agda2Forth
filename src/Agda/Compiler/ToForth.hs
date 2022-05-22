@@ -222,7 +222,7 @@ fthForce :: SchForm -> SchForm
 fthForce x = RSList [x, RSAtom "dethunk"]
 
 
-fthAdd, fthSub, fthMul, fthQuot, fthRem, fthIf, fthEq :: SchForm
+fthAdd, fthSub, fthMul, fthQuot, fthRem, fthIf, fthEq, fthGeq, fthLt :: SchForm
 fthAdd  = RSList [RSAtom "add"]
 fthSub  = RSList [RSAtom "sub"]
 fthMul  = RSList [RSAtom "mul"]
@@ -230,23 +230,8 @@ fthQuot = RSList [RSAtom "quot"]
 fthRem  = RSList [RSAtom "rem"]
 fthIf   = RSList [RSAtom "iff"]
 fthEq   = RSList [RSAtom "eq"]
-
-schPreamble :: ToSchemeM [SchForm]
-schPreamble = do
-  force <- makeForce
-  return
-    [ RSList
-      [ RSAtom "import"
-      , RSList [ RSAtom "only" , RSList [RSAtom "chezscheme"] , RSAtom "record-case" ]
-      ]
-    , schDefine "add"  $ schLambdas ["m","n"] $ RSList [RSAtom "+", force (RSAtom "m"), force (RSAtom "n")]
-    , schDefine "sub"  $ schLambdas ["m","n"] $ RSList [RSAtom "-", force (RSAtom "m"), force (RSAtom "n")]
-    , schDefine "mul"  $ schLambdas ["m","n"] $ RSList [RSAtom "*", force (RSAtom "m"), force (RSAtom "n")]
-    , schDefine "quot" $ schLambdas ["m","n"] $ RSList [RSAtom "div", force (RSAtom "m"), force (RSAtom "n")]
-    , schDefine "rem"  $ schLambdas ["m","n"] $ RSList [RSAtom "mod", force (RSAtom "m"), force (RSAtom "n")]
-    , schDefine "iff"  $ schLambdas ["b","x","y"] $ RSList [RSAtom "if", force (RSAtom "b"), force (RSAtom "x"), force (RSAtom "y")]
-    , schDefine "eq"   $ schLambdas ["x","y"] $ RSList [RSAtom "=", force (RSAtom "x"), force (RSAtom "y")]
-    ]
+fthGeq   = RSList [RSAtom "geq"]
+fthLt   = RSList [RSAtom "lt"]
 
 fthPreamble :: ToSchemeM [SchForm]
 fthPreamble = do
@@ -258,7 +243,10 @@ fthPreamble = do
     , fthWord "quot" $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m dethunk"), force (RSAtom "n dethunk"), RSAtom "/"]
     , fthWord "rem"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m dethunk"), force (RSAtom "n dethunk"), RSAtom "mod"]
     , fthWord "iff"  $ fthLocals ["b","x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "b dethunk"), RSAtom "if", force (RSAtom "x dethunk"), RSAtom "else", force (RSAtom "y dethunk"), RSAtom "then"]
-    , fthWord "eq"   $ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "x dethunk"), force (RSAtom "y dethunk"), RSAtom "="]
+    , fthWord "eq"   $ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "x dethunk"), force (RSAtom "y dethunk"), RSAtom ""]
+    , fthWord "geq"   $ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "x dethunk"), force (RSAtom "y dethunk"), RSAtom ">="]
+    , fthWord "lt"   $ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "x dethunk"), force (RSAtom "y dethunk"), RSAtom "<"]
+    
     ]
 
 deriving instance Generic EvaluationStrategy
