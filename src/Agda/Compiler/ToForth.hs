@@ -221,14 +221,6 @@ schForce x
 fthForce :: SchForm -> SchForm
 fthForce x = RSList [x, RSAtom "dethunk"]
 
-schAdd, schSub, schMul, schQuot, schRem, schIf, schEq :: SchForm
-schAdd  = RSList [RSAtom "add"]
-schSub  = RSList [RSAtom "sub"]
-schMul  = RSList [RSAtom "mul"]
-schQuot = RSList [RSAtom "quot"]
-schRem  = RSList [RSAtom "rem"]
-schIf   = RSList [RSAtom "iff"]
-schEq   = RSList [RSAtom "eq"]
 
 fthAdd, fthSub, fthMul, fthQuot, fthRem, fthIf, fthEq :: SchForm
 fthAdd  = RSList [RSAtom "add"]
