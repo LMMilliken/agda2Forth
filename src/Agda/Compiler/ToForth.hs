@@ -8,7 +8,7 @@ import Agda.Compiler.Treeless.EliminateLiteralPatterns
 
 import Agda.Syntax.Abstract.Name
 import Agda.Syntax.Common
-import Agda.Syntax.Internal ( conName )
+import Agda.Syntax.Internal as I
 import Agda.Syntax.Literal
 import Agda.Syntax.Treeless
 
@@ -246,7 +246,7 @@ fthPreamble = do
     , fthWord "eq"   $ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "x dethunk"), force (RSAtom "y dethunk"), RSAtom ""]
     , fthWord "geq"   $ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "x dethunk"), force (RSAtom "y dethunk"), RSAtom ">="]
     , fthWord "lt"   $ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "x dethunk"), force (RSAtom "y dethunk"), RSAtom "<"]
-    
+
     ]
 
 deriving instance Generic EvaluationStrategy
@@ -477,8 +477,12 @@ instance ToScheme TTerm SchForm where
         return $ fthLocal [x] body
       TLit l -> toScheme l
       TCon c -> do
-        c' <- toScheme c
-        return $ RSList [RSAtom c']
+        special <- isSpecialConstructor c
+        case special of
+          Nothing -> do
+            c' <- toScheme c
+            return $ RSList [RSAtom c']
+          Just v  -> return v
       TLet u v -> do
         expr <- toScheme u
         withFreshVar $ \x -> do
@@ -488,10 +492,30 @@ instance ToScheme TTerm SchForm where
         force <- makeForce
         x <- force . RSAtom <$> getVarName i
         cases <- traverse toScheme bs
-        fallback <- if isUnreachable v
-                    then return Nothing
-                    else Just <$> toScheme v
-        return $ fthPatternMatch x cases fallback
+        special <- isSpecialCase info
+        case special of
+          Nothing -> do
+            fallback <- if isUnreachable v
+                        then return Nothing
+                        else Just <$> toScheme v
+            return $ fthPatternMatch x cases fallback
+          Just BoolCase -> case bs of
+            [] -> __IMPOSSIBLE__
+            (TACon c1 _ v1 : bs') -> do
+              Con trueC  _ _ <- primTrue
+              Con falseC _ _ <- primFalse
+              v1' <- toScheme v1
+              v2' <- case bs' of
+                []                 -> toScheme v
+                (TACon _ _ v2 : _) -> toScheme v2
+                _                  -> __IMPOSSIBLE__
+              let (thenBranch,elseBranch)
+                    | c1 == conName trueC  = (v1',v2')
+                    | c1 == conName falseC = (v2',v1')
+                    | otherwise            = __IMPOSSIBLE__
+              return $ RSList [x, RSAtom "if", thenBranch, RSAtom "else", elseBranch, RSAtom "then"]
+            _ -> return $ RSAtom "ERRONEOUS BOOLCASE DURING CASE MATCHING"
+          
       TUnit -> return fthUnit
       TSort -> return fthUnit
       TErased -> return fthUnit
@@ -537,3 +561,23 @@ instance ToScheme TError SchForm where
   toScheme err = case err of
     TUnreachable -> return $ schError "Panic!"
     TMeta s      -> return $ schError $ "encountered unsolved meta: " <> T.pack s
+
+isSpecialConstructor :: QName -> ToSchemeM (Maybe SchForm)
+isSpecialConstructor c = do
+  Con trueCon  _ _ <- primTrue
+  Con falseCon _ _ <- primFalse
+  if | c == conName trueCon  -> return $ Just $ RSAtom (T.pack $ show (-1))
+     | c == conName falseCon -> return $ Just $ RSAtom (T.pack $ show 0)
+     | otherwise             -> return Nothing
+
+-- Some kinds of case statements are treated in a special way.
+-- Currently, matches on Bool are translated to an `if` statement.
+data SpecialCase = BoolCase
+
+isSpecialCase :: CaseInfo -> ToSchemeM (Maybe SpecialCase)
+isSpecialCase (CaseInfo lazy (CTData q cty)) = do
+  boolTy <- primBool
+  if boolTy == Def cty []
+    then return (Just BoolCase)
+    else return Nothing
+specialCase _ = return Nothing
