@@ -5,7 +5,9 @@ id x = x
 
 data Bool : Set where
   true false : Bool
-
+{-# BUILTIN BOOL  Bool  #-}
+{-# BUILTIN TRUE  true  #-}
+{-# BUILTIN FALSE false #-}
 not : Bool → Bool
 not true  = false
 not false = true
