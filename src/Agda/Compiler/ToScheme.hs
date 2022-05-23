@@ -371,11 +371,7 @@ instance ToScheme Definition (Maybe SchForm) where
         let c = conName chead
         c' <- toScheme c
         withFreshVars nargs $ \xs ->
-<<<<<<< HEAD
-          return $ Just $ schDefine c' (schLambdas xs (schConApp c (map RSAtom xs)))
-=======
           return $ Just $ schDefine c' $ schLambdas xs $ schConApp c' $ map RSAtom xs
->>>>>>> 80addc920a5ee2132a4879f1ab08948cb780444e
 
       AbstractDefn{} -> __IMPOSSIBLE__
       DataOrRecSig{} -> __IMPOSSIBLE__
