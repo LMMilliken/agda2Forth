@@ -220,7 +220,7 @@ schForce x
   | otherwise                       = RSList [RSAtom "force", x]
 
 fthForce :: SchForm -> SchForm
-fthForce x = RSList [x, RSAtom "dethunk"]
+fthForce x = RSList [x, RSAtom "deepdethunk"]
 
 
 fthAdd, fthSub, fthMul, fthQuot, fthRem, fthIf, fthEq, fthGeq, fthLt :: SchForm
@@ -332,7 +332,7 @@ makeDelay = return id
   --   LazyEvaluation  -> return fthDelay
 
 makeForce :: ToSchemeM (SchForm -> SchForm)
-makeForce = return id
+makeForce = return fthForce
   -- do
   -- strat <- getEvaluationStrategy
   -- case strat of
