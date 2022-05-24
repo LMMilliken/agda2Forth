@@ -5,7 +5,7 @@ import Prelude hiding ( null , empty )
 import Agda.Compiler.Common
 import Agda.Compiler.ToTreeless
 import Agda.Compiler.Treeless.EliminateLiteralPatterns
-
+import Agda.Compiler.Treeless.GuardsToPrims
 import Agda.Syntax.Abstract.Name
 import Agda.Syntax.Common
 import Agda.Syntax.Internal as I
@@ -461,7 +461,7 @@ instance ToScheme Definition (Maybe SchForm) where
 
 instance ToScheme TTerm SchForm where
   toScheme v = do
-    v <- liftTCM $ eliminateLiteralPatterns v
+    v <- liftTCM $ eliminateLiteralPatterns (convertGuards v)
     let (w, args) = tAppView v
     delay <- makeDelay
     args' <- map delay <$> traverse toScheme args
