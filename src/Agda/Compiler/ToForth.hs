@@ -67,7 +67,7 @@ schDefine f body = RSList
 
 fthWord :: SchAtom -> SchForm -> SchForm
 fthWord f body = RSAtom (
-  T.pack ("defer " ++ T.unpack f ++ "\nvariable XT"++ T.unpack f ++"\n:noname "++ " " ++ T.unpack (formToAtom body) ++
+  T.pack ("variable XT"++ T.unpack f ++"\n:noname "++ " " ++ T.unpack (formToAtom body) ++
   " ; XT" ++ T.unpack f ++ " !\n:noname" ++ " XT" ++ T.unpack f ++ " @ makeTHUNK ; is " ++ T.unpack f))
   where
     replaceF :: SchAtom -> SchForm -> SchForm
@@ -604,3 +604,22 @@ isSpecialCase (CaseInfo lazy (CTData q cty)) = do
     then return (Just BoolCase)
     else return Nothing
 specialCase _ = return Nothing
+
+makeDefines :: Text -> Text
+makeDefines x = T.append (T.pack defines) x
+  where
+    defines = concat (map (\y -> "defer " ++ y ++ "\n") (findAssignments (T.unpack x)))
+
+findAssignments :: String -> [String]
+findAssignments (';':' ':'i':'s':' ':rest) = name:(findAssignments rest2)
+  where
+    (name, rest2) = getAssignment rest
+findAssignments (x:rest) = findAssignments rest
+findAssignments [] = []
+
+getAssignment :: String -> (String, String)
+getAssignment ('\n':rest) = ([], rest)
+getAssignment [] = ([], [])
+getAssignment (x:rest) = ((x:xs), rest2)
+  where
+      (xs, rest2) = getAssignment rest
