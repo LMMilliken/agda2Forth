@@ -15,7 +15,6 @@ import Agda.Syntax.Treeless
 import Agda.TypeChecking.Monad
 import Agda.TypeChecking.Pretty
 import Agda.TypeChecking.Primitive.Base
-
 import Agda.Utils.Impossible
 import Agda.Utils.Lens
 import Agda.Utils.List
@@ -243,7 +242,7 @@ fthPreamble = do
     , fthWord "mul"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "*"]
     , fthWord "quot" $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "/"]
     , fthWord "rem"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "mod"]
-    , fthWord "iff"  $ fthLocals ["b","x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "b"), RSAtom "if", force (RSAtom "x"), RSAtom "else", force (RSAtom "y dethunk"), RSAtom "then"]
+    , fthWord "iff"  $ fthLocals ["b","x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "b"), RSAtom "if", force (RSAtom "x"), RSAtom "else", force (RSAtom "y"), RSAtom "then"]
     , fthWord "eq"   $ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "x"), force (RSAtom "y"), RSAtom ""]
     , fthWord "geq"  $ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "x"), force (RSAtom "y"), RSAtom ">="]
     , fthWord "lt"   $ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "x"), force (RSAtom "y"), RSAtom "<"]
@@ -471,7 +470,7 @@ instance ToScheme TTerm SchForm where
           name <- getVarName i
           force <- makeForce
           applyToArgs $ force $ RSAtom name
-      TPrim p -> toScheme p
+      TPrim p -> toScheme p >>= applyToArgs
       TDef d -> do
         special <- isSpecialDefinition d
         case special of
@@ -482,8 +481,8 @@ instance ToScheme TTerm SchForm where
       TLam v -> withFreshVar $ \x -> do
         unless (null args) __IMPOSSIBLE__
         body <- toScheme v
-        return $ fthLocal [x] body
-      TLit l -> do
+        applyToArgs $ fthLocal [x] body
+      TLit l -> do 
         unless (null args) __IMPOSSIBLE__
         toScheme l
       TCon c -> do
@@ -498,7 +497,7 @@ instance ToScheme TTerm SchForm where
         expr <- toScheme u
         withFreshVar $ \x -> do
           body <- toScheme v
-          return $ fthLet [(x,expr)] body
+          applyToArgs $ fthLet [(x,expr)] body
       TCase i info v bs -> do
         unless (null args) __IMPOSSIBLE__
         force <- makeForce
@@ -510,7 +509,7 @@ instance ToScheme TTerm SchForm where
             fallback <- if isUnreachable v
                         then return Nothing
                         else Just <$> toScheme v
-            return $ fthPatternMatch x cases fallback
+            applyToArgs $ fthPatternMatch x cases fallback
           Just BoolCase -> case bs of
             [] -> __IMPOSSIBLE__
             (TACon c1 _ v1 : bs') -> do
@@ -525,7 +524,7 @@ instance ToScheme TTerm SchForm where
                     | c1 == conName trueC  = (v1',v2')
                     | c1 == conName falseC = (v2',v1')
                     | otherwise            = __IMPOSSIBLE__
-              return $ RSList [x, RSAtom "if", thenBranch, RSAtom "else", elseBranch, RSAtom "then"]
+              applyToArgs $ RSList [x, RSAtom "if", thenBranch, RSAtom "else", elseBranch, RSAtom "then"]
             _ -> return $ RSAtom "ERRONEOUS BOOLCASE DURING CASE MATCHING"
           
       TUnit -> do
