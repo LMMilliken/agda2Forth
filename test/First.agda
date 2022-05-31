@@ -8,6 +8,8 @@ data Bool : Set where
 {-# BUILTIN BOOL  Bool  #-}
 {-# BUILTIN TRUE  true  #-}
 {-# BUILTIN FALSE false #-}
+
+
 not : Bool → Bool
 not true  = false
 not false = true

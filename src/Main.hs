@@ -79,7 +79,12 @@ schPostModule :: SchOptions -> () -> IsMain -> ModuleName -> [Maybe SchForm] -> 
 schPostModule opts _ isMain modName defs = do
   preamble <- runToSchemeM opts fthPreamble
   let defToText = encodeOne printer . fromRich
-      modText   = makeDefines (T.intercalate "\n\n" $ map defToText $ preamble ++ catMaybes defs)
+      modText   = makeDefines
+        (T.intercalate "\n\n" $
+        map 
+          ((\x -> T.pack (snd (moveLambdas (T.unpack x) []))) 
+            . defToText) 
+          (preamble ++ catMaybes defs))
       fileName  = prettyShow (last $ mnameToList modName) ++ ".fth"
   liftIO $ T.writeFile fileName modText
 

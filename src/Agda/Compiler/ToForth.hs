@@ -117,7 +117,16 @@ schLambda args body = RSList
 
 fthLocal :: [SchAtom] -> SchForm -> SchForm
 fthLocal args body = RSAtom $ T.pack $
-  "{ " ++ concatMap (\arg -> T.unpack arg ++ " ") args ++ "} " ++ newLine ++ T.unpack (formToAtom body)
+  ":LAM { " ++ concatMap (\arg -> T.unpack arg ++ " ") args ++ "} " ++ newLine ++ T.unpack (formToAtom body) ++ " LAM;"
+
+moveLambdas :: String -> String -> (String, String)
+moveLambdas (':':'L':'A':'M':' ':rest) acc = moveLambdas rest2 (acc2++acc)
+  where
+    (rest2, acc2) = moveLambdas rest ":noname "
+moveLambdas (' ':'L':'A':'M':';':rest) acc = (rest, acc ++ " ;\n")
+moveLambdas (x:rest) acc = moveLambdas rest (acc++[x])
+moveLambdas [] acc = ([], acc)
+
 
 -- Bind each argument individually instead of all at once.
 schLambdas :: [SchAtom] -> SchForm -> SchForm
@@ -182,7 +191,7 @@ fthPatternMatch x cases maybeFallback  = RSList
       makeForthy arg (RSList [pat, RSList wildcards, expr]:xs) fallback = T.concat [
         T.concat [
           formToAtom arg,
-          T.concat (map (\x -> T.pack "makeWILDCARD ") wildcards ++ [formToAtom pat] ++ map (\x -> T.pack "pass ") wildcards),
+          T.concat (map (\x -> T.pack "makeWILDCARD ") wildcards ++ [T.pack ( fixName (init $ T.unpack (formToAtom pat)) ++ " ")] ++ map (\x -> T.pack "pass ") wildcards),
           T.pack "0 pointer !",
           T.concat (T.pack (" obj= if wildcards " ++ show (length wildcards) ++ " pushArray { ") : map formToAtom wildcards ++ [T.pack "} "] ++ [T.pack newLine]),
           formToAtom expr
@@ -386,6 +395,12 @@ isValidSchemeChar x
   | isAscii x = isAlphaNum x || x `Set.member` schemeExtendedAlphaChars
   | otherwise = generalCategory x `Set.member` schemeAllowedUnicodeCats
 
+isValidForthChar :: Char -> Bool
+isValidForthChar x
+  =  x /= ' '
+  && x /= '\n'
+  && x /= '\t'
+
 -- Creates a valid Scheme name from a (qualified) Agda name.
 -- Precondition: the given name is not already in toSchemeDefs.
 makeSchemeName :: QName -> ToSchemeM SchAtom
@@ -399,16 +414,19 @@ makeSchemeName n = do
 
     go s     = ifM (isNameUsed $ T.pack s) (go $ nextName s) (return $ T.pack s)
 
-    fixName s =
-      let s' = concatMap fixChar s in
-      if isNumber (head s') then "z" ++ s' else s'
+fixName :: Foldable t => t Char -> [Char]
+fixName s =
+  let s' = concatMap fixChar s in
+  if isNumber (head s') then "z" ++ s' else s'
 
-    fixChar c
-      | isValidSchemeChar c = [c]
-      | otherwise           = "\\x" ++ toHex (ord c) ++ ";"
+fixChar :: Char -> [Char]
+fixChar c
+  | isValidForthChar c = [c]
+  | otherwise           = "\\x" ++ toHex (ord c) ++ ";"
 
-    toHex 0 = ""
-    toHex i = toHex (i `div` 16) ++ [fourBitsToChar (i `mod` 16)]
+toHex :: Int -> [Char]
+toHex 0 = ""
+toHex i = toHex (i `div` 16) ++ [fourBitsToChar (i `mod` 16)]
 
 fourBitsToChar :: Int -> Char
 fourBitsToChar i = "0123456789ABCDEF" !! i
@@ -483,7 +501,7 @@ instance ToScheme TTerm SchForm where
         unless (null args) __IMPOSSIBLE__
         body <- toScheme v
         applyToArgs $ fthLocal [x] body
-      TLit l -> do 
+      TLit l -> do
         unless (null args) __IMPOSSIBLE__
         toScheme l
       TCon c -> do
@@ -527,7 +545,7 @@ instance ToScheme TTerm SchForm where
                     | otherwise            = __IMPOSSIBLE__
               applyToArgs $ RSList [x, RSAtom "if", thenBranch, RSAtom "else", elseBranch, RSAtom "then"]
             _ -> return $ RSAtom "ERRONEOUS BOOLCASE DURING CASE MATCHING"
-          
+
       TUnit -> do
         unless (null args) __IMPOSSIBLE__
         return fthUnit
@@ -537,7 +555,7 @@ instance ToScheme TTerm SchForm where
       TErased -> return fthUnit
       TCoerce u -> applyToArgs =<< toScheme u
       TError err -> toScheme err
-      TApp f args -> __IMPOSSIBLE__ 
+      TApp f args -> __IMPOSSIBLE__
 
     where
       isUnreachable v = v == TError TUnreachable
