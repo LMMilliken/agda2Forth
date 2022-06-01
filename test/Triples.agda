@@ -39,7 +39,7 @@ record Triple : Set where
     fst snd trd : Nat
 
 alltriples : Nat → List Triple
-alltriples top = range 1 top >>= λ z → (range 1 z >>= λ y → (range 1 y >>= λ x → ((triple x y z) :: [])))
+alltriples top = range 1 top >>= λ z → (range 2 z >>= λ y → (range 3 y >>= λ x → ((triple x y z) :: [])))
 
 cartesian : Triple → Bool
 cartesian (triple x y z) = x * x + y * y == z * z

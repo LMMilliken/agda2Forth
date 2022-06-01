@@ -81,9 +81,10 @@ schPostModule opts _ isMain modName defs = do
   let defToText = encodeOne printer . fromRich
       modText   = makeDefines
         (T.intercalate "\n\n" $
-        map 
-          ((\x -> T.pack (snd (moveLambdas (T.unpack x) []))) 
-            . defToText) 
+        map (
+            (\x -> T.pack (snd (moveLambdas (T.unpack x) []))) .
+            defToText
+        ) 
           (preamble ++ catMaybes defs))
       fileName  = prettyShow (last $ mnameToList modName) ++ ".fth"
   liftIO $ T.writeFile fileName modText

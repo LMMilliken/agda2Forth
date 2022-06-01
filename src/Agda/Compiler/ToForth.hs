@@ -66,15 +66,13 @@ schDefine f body = RSList
 
 fthWord :: SchAtom -> SchForm -> SchForm
 fthWord f body = RSAtom (
+  T.pack (T.unpack (formToAtom body) ++
+  ":noname makeTHUNK ; pass is " ++ T.unpack f))
+
+fthSimpleWord :: SchAtom -> SchForm -> SchForm
+fthSimpleWord f body = RSAtom (
   T.pack ("variable XT"++ T.unpack f ++"\n:noname "++ " " ++ T.unpack (formToAtom body) ++
   " ; XT" ++ T.unpack f ++ " !\n:noname" ++ " XT" ++ T.unpack f ++ " @ makeTHUNK ; is " ++ T.unpack f))
-  where
-    replaceF :: SchAtom -> SchForm -> SchForm
-    replaceF f (RSAtom word)
-      | word == f = RSAtom "recurse"
-      | otherwise = RSAtom $ T.replace (T.concat [T.pack " ", f, T.pack " "]) (T.pack " recurse ") word
-    replaceF f (RSList xs) = RSList $ map (replaceF f) xs
-    replaceF f (RSDotted xs y) = RSDotted (map (replaceF f) xs) (if f == y then T.pack "recurse" else y)
 
 
 fthDefineType :: SchAtom -> Int -> SchAtom -> SchForm
@@ -114,19 +112,58 @@ schLambda args body = RSList
   , body
   ]
 
-
 fthLocal :: [SchAtom] -> SchForm -> SchForm
 fthLocal args body = RSAtom $ T.pack $
-  ":LAM { " ++ concatMap (\arg -> T.unpack arg ++ " ") args ++ "} " ++ newLine ++ T.unpack (formToAtom body) ++ " LAM;"
+  "{ " ++ concatMap (\arg -> T.unpack arg ++ " ") args ++ "} " ++ newLine ++ T.unpack (formToAtom body)
+
+
+fthLambda :: [SchAtom] -> SchForm -> SchForm
+fthLambda args body = RSAtom $ T.pack $
+  "!LAM! :LAM { " ++ concatMap (\arg -> T.unpack arg ++ " ") args ++ "} " ++ newLine ++ replaceLambda args (addArgs $ T.unpack injected) ++ " LAM;"
+  where
+    replaceLambda (x:xs) ('!':'L':'A':'M':'!':rest) = " !LA " ++ T.unpack x ++ " M! " ++ replaceLambda xs rest
+    replaceLambda xs (y:ys) = y:replaceLambda xs ys
+    replaceLambda xs [] = []
+
+    addArgs ('!':'L':'A':rest) = T.unpack (T.intercalate " " ( reverse args)) ++ " !LA" ++ addPasses rest
+    addArgs (x:xs) = x:addArgs xs
+    addArgs [] = []
+
+    addPasses ('M':'!':rest) = "M! " ++ concatMap (const " pass ") args ++ addArgs rest
+    addPasses (x:xs) = x:addPasses xs
+    addPasses [] = []
+
+    injected = T.replace ":LAM { " (T.append ":LAM { " (T.append (T.intercalate " " args) " ")) (formToAtom body)
 
 moveLambdas :: String -> String -> (String, String)
 moveLambdas (':':'L':'A':'M':' ':rest) acc = moveLambdas rest2 (acc2++acc)
   where
     (rest2, acc2) = moveLambdas rest ":noname "
-moveLambdas (' ':'L':'A':'M':';':rest) acc = (rest, acc ++ " ;\n")
+moveLambdas (' ':'L':'A':'M':';':rest) acc = (rest, acc ++ " ; makeTHUNK pass \n")
 moveLambdas (x:rest) acc = moveLambdas rest (acc++[x])
-moveLambdas [] acc = ([], acc)
+moveLambdas [] acc = ([], T.unpack $ replaceOne (removeMany ["!LA", "M!"] (T.pack acc)))
 
+removeMany :: [Text] -> Text -> Text
+removeMany xs str = foldr (`T.replace` "") str xs
+
+
+replaceOne :: Text -> Text
+replaceOne text
+  | T.null back = text
+  | otherwise = T.concat [front, "makeTHUNK", T.drop 14 back]
+    where
+      (front, back) = T.breakOn "makeTHUNK pass" text
+
+countOccurences :: Text -> Text -> Int
+countOccurences t s = sum [ 1 | r <- T.tails s, T.isPrefixOf t r ]
+
+countLambdas :: SchForm -> Int
+countLambdas (RSAtom atom) = countOccurences "!LAM!" atom
+countLambdas x = countLambdas (RSAtom (formToAtom x))
+
+
+-- >>> countOccurences (T.pack "hi") (T.pack "hihihi")
+-- 3
 
 -- Bind each argument individually instead of all at once.
 schLambdas :: [SchAtom] -> SchForm -> SchForm
@@ -246,16 +283,16 @@ fthPreamble :: ToSchemeM [SchForm]
 fthPreamble = do
   force <- makeForce
   return
-    [ fthWord "add"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "+"]
-    , fthWord "sub"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "-"]
-    , fthWord "mul"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "*"]
-    , fthWord "quot" $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "/"]
-    , fthWord "rem"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "mod"]
-    , fthWord "iff"  $ fthLocals ["b","x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "b"), RSAtom "if", force (RSAtom "x"), RSAtom "else", force (RSAtom "y"), RSAtom "then"]
-    , fthWord "eq"   $ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "x"), force (RSAtom "y"), RSAtom "="]
-    , fthWord "geq"  $ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "x"), force (RSAtom "y"), RSAtom ">="]
-    , fthWord "lt"   $ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "x"), force (RSAtom "y"), RSAtom "<"]
-    , fthWord "monus"$ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "y x sub pass pass"),  RSAtom "dup 0 < if drop 0 then"]
+    [ fthSimpleWord "add"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "+"]
+    , fthSimpleWord "sub"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "-"]
+    , fthSimpleWord "mul"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "*"]
+    , fthSimpleWord "quot" $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "/"]
+    , fthSimpleWord "rem"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "mod"]
+    , fthSimpleWord "iff"  $ fthLocals ["b","x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "b"), RSAtom "if", force (RSAtom "x"), RSAtom "else", force (RSAtom "y"), RSAtom "then"]
+    , fthSimpleWord "eq"   $ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "x"), force (RSAtom "y"), RSAtom "="]
+    , fthSimpleWord "geq"  $ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "x"), force (RSAtom "y"), RSAtom ">="]
+    , fthSimpleWord "lt"   $ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "x"), force (RSAtom "y"), RSAtom "<"]
+    , fthSimpleWord "monus"$ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "y x sub pass pass"),  RSAtom "dup 0 < if drop 0 then"]
     ]
 
 deriving instance Generic EvaluationStrategy
@@ -298,7 +335,7 @@ reservedNames = Set.fromList $ map T.pack
   [ "loop" , "dethunk" , "obj=" , "obj=?"
   , "deepdethunk" , "print" , "shallowPrint"
   , "add", "sub", "mul", "quot", "rem"
-  , "iff", "eq", "monus"
+  , "iff", "eq", "monus", "i"
   -- TODO: add more
   ]
 
@@ -500,7 +537,8 @@ instance ToScheme TTerm SchForm where
       TLam v -> withFreshVar $ \x -> do
         unless (null args) __IMPOSSIBLE__
         body <- toScheme v
-        applyToArgs $ fthLocal [x] body
+        withFreshVars (countLambdas body) $ \y -> do
+          applyToArgs $ fthLambda (y++[x]) body
       TLit l -> do
         unless (null args) __IMPOSSIBLE__
         toScheme l
@@ -629,7 +667,7 @@ makeDefines x = T.append (T.pack defines) x
     defines = concat (map (\y -> "defer " ++ y ++ "\n") (findAssignments (T.unpack x)))
 
 findAssignments :: String -> [String]
-findAssignments (';':' ':'i':'s':' ':rest) = name:(findAssignments rest2)
+findAssignments (' ':'i':'s':' ':rest) = name:(findAssignments rest2)
   where
     (name, rest2) = getAssignment rest
 findAssignments (x:rest) = findAssignments rest
