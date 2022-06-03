@@ -41,6 +41,7 @@ _+_ : Nat → Nat → Nat
 zero + n = n
 (suc m) + n = suc (m + n)
 
+
 twice : Nat → Nat
 twice zero = zero
 twice (suc n) = suc (suc (twice n))

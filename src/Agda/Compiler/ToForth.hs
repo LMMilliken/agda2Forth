@@ -65,15 +65,17 @@ schDefine f body = RSList
   ["define", RSList [RSAtom f], body]
 
 fthWord :: SchAtom -> SchForm -> SchForm
-fthWord f body = RSAtom (
-  T.pack (T.unpack (formToAtom body) ++
-  ":noname makeTHUNK ; pass is " ++ T.unpack f))
+fthWord f body
+  | countLambdas body == 0 = fthSimpleWord f body
+  | otherwise = RSAtom (
+  T.pack ("ENDFLAG \n " ++ T.unpack (formToAtom body) ++
+  "create XT"++ T.unpack f ++" fillHere \n "++
+  ":noname" ++ " XT" ++ T.unpack f ++ " foldThunks ; is " ++ T.unpack f))
 
 fthSimpleWord :: SchAtom -> SchForm -> SchForm
 fthSimpleWord f body = RSAtom (
   T.pack ("variable XT"++ T.unpack f ++"\n:noname "++ " " ++ T.unpack (formToAtom body) ++
   " ; XT" ++ T.unpack f ++ " !\n:noname" ++ " XT" ++ T.unpack f ++ " @ makeTHUNK ; is " ++ T.unpack f))
-
 
 fthDefineType :: SchAtom -> Int -> SchAtom -> SchForm
 fthDefineType f args body = RSAtom
@@ -88,7 +90,7 @@ fthPrinter f = T.concat [
   ]
 
 fthConstructor :: SchAtom -> Int -> SchAtom
-fthConstructor f args = formToAtom $ fthWord f (RSAtom $ T.pack
+fthConstructor f args = formToAtom $ fthSimpleWord f (RSAtom $ T.pack
     (" type" ++ T.unpack f ++  " here "
     ++ show (args + 1) ++ " fillArray here " ++ show (args + 1) ++ " cells allot"))
 
@@ -117,9 +119,27 @@ fthLocal args body = RSAtom $ T.pack $
   "{ " ++ concatMap (\arg -> T.unpack arg ++ " ") args ++ "} " ++ newLine ++ T.unpack (formToAtom body)
 
 
-fthLambda :: [SchAtom] -> SchForm -> SchForm
-fthLambda args body = RSAtom $ T.pack $
-  "!LAM! :LAM { " ++ concatMap (\arg -> T.unpack arg ++ " ") args ++ "} " ++ newLine ++ replaceLambda args (addArgs $ T.unpack injected) ++ " LAM;"
+-- fthLambda :: [SchAtom] -> SchForm -> SchForm
+-- fthLambda args body = RSAtom $ T.pack $
+--   "!LAM! :LAM { " ++ concatMap (\arg -> T.unpack arg ++ " ") args ++ "} " ++ newLine ++ replaceLambda args (addArgs $ T.unpack injected) ++ " LAM;"
+--   where
+--     replaceLambda (x:xs) ('!':'L':'A':'M':'!':rest) = " !LA " ++ T.unpack x ++ " M! " ++ replaceLambda xs rest
+--     replaceLambda xs (y:ys) = y:replaceLambda xs ys
+--     replaceLambda xs [] = []
+
+--     addArgs ('!':'L':'A':rest) = T.unpack (T.intercalate " " ( reverse args)) ++ " !LA" ++ addPasses rest
+--     addArgs (x:xs) = x:addArgs xs
+--     addArgs [] = []
+
+--     addPasses ('M':'!':rest) = "M! " ++ concatMap (const " pass ") args ++ addArgs rest
+--     addPasses (x:xs) = x:addPasses xs
+--     addPasses [] = []
+
+--     injected = T.replace ":LAM { " (T.append ":LAM { " (T.append (T.intercalate " " args) " ")) (formToAtom body)
+
+fthLambda :: [SchAtom] -> [SchAtom] -> SchForm -> SchForm
+fthLambda args lambdas body = RSAtom $ T.pack $
+  "!LAM! :LAM { " ++ bindings ++ "} " ++ newLine ++ replaceLambda lambdas (addArgs $ T.unpack injected) ++ " LAM;"
   where
     replaceLambda (x:xs) ('!':'L':'A':'M':'!':rest) = " !LA " ++ T.unpack x ++ " M! " ++ replaceLambda xs rest
     replaceLambda xs (y:ys) = y:replaceLambda xs ys
@@ -133,15 +153,27 @@ fthLambda args body = RSAtom $ T.pack $
     addPasses (x:xs) = x:addPasses xs
     addPasses [] = []
 
-    injected = T.replace ":LAM { " (T.append ":LAM { " (T.append (T.intercalate " " args) " ")) (formToAtom body)
+    bindings = concatMap (\arg -> T.unpack arg ++ " ") args ++ " ( LAM ) " ++ concatMap (\arg -> T.unpack arg ++ " ") lambdas
+    -- bindings = concatMap (\arg -> T.unpack arg ++ " ") (args ++ lambdas)
+
+    injected = 
+      -- T.replace " } " (T.append " } " (T.append (T.intercalate " " lambdas) " ")) $
+      T.replace " ( LAM ) " (T.append (T.append (T.intercalate " " args) " ") " ( LAM ) ") (formToAtom body)
+
+
+fixWord :: Text -> Text
+fixWord word = T.concat [f, " ", T.pack (snd (moveLambdas (T.unpack body) []))]
+  where
+    (f, body) = T.breakOn "\n" word
+
 
 moveLambdas :: String -> String -> (String, String)
 moveLambdas (':':'L':'A':'M':' ':rest) acc = moveLambdas rest2 (acc2++acc)
   where
     (rest2, acc2) = moveLambdas rest ":noname "
-moveLambdas (' ':'L':'A':'M':';':rest) acc = (rest, acc ++ " ; makeTHUNK pass \n")
+moveLambdas (' ':'L':'A':'M':';':rest) acc = (rest, acc ++ " ; \n")
 moveLambdas (x:rest) acc = moveLambdas rest (acc++[x])
-moveLambdas [] acc = ([], T.unpack $ replaceOne (removeMany ["!LA", "M!"] (T.pack acc)))
+moveLambdas [] acc = ([], T.unpack $ replaceOne (removeMany ["!LA", "M!", " ( LAM )"] (T.pack acc)))
 
 removeMany :: [Text] -> Text -> Text
 removeMany xs str = foldr (`T.replace` "") str xs
@@ -230,7 +262,7 @@ fthPatternMatch x cases maybeFallback  = RSList
           formToAtom arg,
           T.concat (map (\x -> T.pack "makeWILDCARD ") wildcards ++ [T.pack ( fixName (init $ T.unpack (formToAtom pat)) ++ " ")] ++ map (\x -> T.pack "pass ") wildcards),
           T.pack "0 pointer !",
-          T.concat (T.pack (" obj= if wildcards " ++ show (length wildcards) ++ " pushArray { ") : map formToAtom wildcards ++ [T.pack "} "] ++ [T.pack newLine]),
+          T.concat (T.pack (" obj= if wildcards " ++ show (length wildcards) ++ " pushArrayN { ") : map formToAtom wildcards ++ [T.pack "} "] ++ [T.pack newLine]),
           formToAtom expr
         ],
         T.pack " else ",
@@ -335,7 +367,8 @@ reservedNames = Set.fromList $ map T.pack
   [ "loop" , "dethunk" , "obj=" , "obj=?"
   , "deepdethunk" , "print" , "shallowPrint"
   , "add", "sub", "mul", "quot", "rem"
-  , "iff", "eq", "monus", "i"
+  , "iff", "eq", "monus", "curry", "{", "}"
+  , "(", ")"
   -- TODO: add more
   ]
 
@@ -538,7 +571,7 @@ instance ToScheme TTerm SchForm where
         unless (null args) __IMPOSSIBLE__
         body <- toScheme v
         withFreshVars (countLambdas body) $ \y -> do
-          applyToArgs $ fthLambda (y++[x]) body
+          applyToArgs $ fthLambda [x] y body
       TLit l -> do
         unless (null args) __IMPOSSIBLE__
         toScheme l
@@ -557,8 +590,9 @@ instance ToScheme TTerm SchForm where
           applyToArgs $ fthLet [(x,expr)] body
       TCase i info v bs -> do
         unless (null args) __IMPOSSIBLE__
-        force <- makeForce
-        x <- force . RSAtom <$> getVarName i
+        -- force <- makeForce
+        -- x <- force . RSAtom <$> getVarName i
+        x <- RSAtom <$> getVarName i
         cases <- traverse toScheme bs
         special <- isSpecialCase info
         case special of

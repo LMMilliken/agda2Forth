@@ -82,7 +82,7 @@ schPostModule opts _ isMain modName defs = do
       modText   = makeDefines
         (T.intercalate "\n\n" $
         map (
-            (\x -> T.pack (snd (moveLambdas (T.unpack x) []))) .
+            fixWord .
             defToText
         ) 
           (preamble ++ catMaybes defs))
