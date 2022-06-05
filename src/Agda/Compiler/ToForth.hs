@@ -156,7 +156,7 @@ fthLambda args lambdas body = RSAtom $ T.pack $
     bindings = concatMap (\arg -> T.unpack arg ++ " ") args ++ " ( LAM ) " ++ concatMap (\arg -> T.unpack arg ++ " ") lambdas
     -- bindings = concatMap (\arg -> T.unpack arg ++ " ") (args ++ lambdas)
 
-    injected = 
+    injected =
       -- T.replace " } " (T.append " } " (T.append (T.intercalate " " lambdas) " ")) $
       T.replace " ( LAM ) " (T.append (T.append (T.intercalate " " args) " ") " ( LAM ) ") (formToAtom body)
 
@@ -260,17 +260,26 @@ fthPatternMatch x cases maybeFallback  = RSList
       makeForthy arg (RSList [pat, RSList wildcards, expr]:xs) fallback = T.concat [
         T.concat [
           formToAtom arg,
-          T.concat (map (\x -> T.pack "makeWILDCARD ") wildcards ++ [T.pack ( fixName (init $ T.unpack (formToAtom pat)) ++ " ")] ++ map (\x -> T.pack "pass ") wildcards),
+          T.concat (map (\x -> T.pack "makeWILDCARD ") wildcards ++ [T.pack (init (T.unpack (formToAtom pat)) ++ " ")] ++ map (\x -> T.pack "pass ") wildcards),
+          -- T.concat (map (\x -> T.pack "makeWILDCARD ") wildcards ++ [T.pack ( fixName (init $ T.unpack (formToAtom pat)) ++ " ")] ++ map (\x -> T.pack "pass ") wildcards),
           T.pack "0 pointer !",
-          T.concat (T.pack (" obj= if wildcards " ++ show (length wildcards) ++ " pushArrayN { ") : map formToAtom wildcards ++ [T.pack "} "] ++ [T.pack newLine]),
+          T.concat (T.pack (" obj=? if wildcards " ++ show (length wildcards) ++ " pushArrayN { ") : map formToAtom wildcards ++ [T.pack "} "] ++ [T.pack newLine]),
           formToAtom expr
         ],
         T.pack " else ",
         makeForthy arg xs fallback,
         T.pack " then "
         ]
+      makeForthy arg (RSList [guard, body]:xs) fallback = T.concat
+        [ formToAtom guard
+        , " if "
+        , formToAtom body
+        , " else "
+        , makeForthy arg xs fallback
+        , " then "
+        ]
       makeForthy arg (other:xs) fallback = T.append
-        (T.pack "UH OH!, ENCOUNTERED SOMETHING OTHER THAN AN RSLIST WHEN COMPILING PATTERN MATCHING")
+        (T.pack "ENCOUNTERED UNEXPECTED PATTERN WHEN COMPILING PATTERN MATCHING")
         (makeForthy arg xs fallback)
       makeForthy arg [] fallback = T.concat (map formToAtom (maybeToList fallback))
 
@@ -548,7 +557,7 @@ instance ToScheme Definition (Maybe SchForm) where
 
 instance ToScheme TTerm SchForm where
   toScheme v = do
-    v <- liftTCM $ eliminateLiteralPatterns (convertGuards v)
+    -- v <- liftTCM $ eliminateLiteralPatterns (convertGuards v)
     let (w, args) = tAppView v
     delay <- makeDelay
     args' <- map delay <$> traverse toScheme args
@@ -594,6 +603,10 @@ instance ToScheme TTerm SchForm where
         -- x <- force . RSAtom <$> getVarName i
         x <- RSAtom <$> getVarName i
         cases <- traverse toScheme bs
+        -- fallback <- if isUnreachable v
+        --     then return Nothing
+        --     else Just <$> toScheme v
+        -- applyToArgs $ fthPatternMatch x cases fallback
         special <- isSpecialCase info
         case special of
           Nothing -> do
@@ -641,6 +654,7 @@ instance ToScheme TPrim SchForm where
     PRem  -> return fthRem
     PIf   -> return fthIf
     PEqI  -> return fthEq
+    PGeq  -> return fthGeq
     _     -> return $ schError $ T.pack $ "not yet supported: primitive " ++ show p
 
 instance ToScheme Literal SchForm where
@@ -661,8 +675,15 @@ instance ToScheme TAlt SchForm where
       body <- toScheme v
       return $ RSList [RSList [RSAtom (schConName c)], RSList (map RSAtom xs), body]
 
-    TAGuard{} -> __IMPOSSIBLE__ -- TODO
-    TALit{}   -> __IMPOSSIBLE__ -- TODO
+    TAGuard guard body -> do
+      guard <- toScheme guard
+      body <- toScheme body
+      return $ RSList [guard, body]
+
+    TALit lit body -> do
+      lit <- toScheme lit
+      body <- toScheme body
+      return $ RSList [lit, RSList [], body]
 
 instance ToScheme TError SchForm where
   toScheme err = case err of
@@ -693,7 +714,7 @@ isSpecialCase (CaseInfo lazy (CTData q cty)) = do
   if boolTy == Def cty []
     then return (Just BoolCase)
     else return Nothing
-specialCase _ = return Nothing
+isSpecialCase _ = return Nothing
 
 makeDefines :: Text -> Text
 makeDefines x = T.append (T.pack defines) x
