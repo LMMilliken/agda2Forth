@@ -41,8 +41,8 @@ import qualified Data.Text as T
 
 import GHC.Generics ( Generic )
 
-type SchAtom = Text
-type SchForm = RichSExpr SchAtom
+type FthAtom = Text
+type FthForm = RichSExpr FthAtom
 
 makepretty :: Bool
 makepretty = True
@@ -52,19 +52,12 @@ newLine
   | makepretty = "\n"
   | otherwise = ""
 
-formToAtom :: SchForm -> SchAtom
+formToAtom :: FthForm -> FthAtom
 formToAtom (RSAtom ret) = T.append ret (T.pack " ")
 formToAtom (RSList xs) = T.concat (map formToAtom xs)
 formToAtom (RSDotted xs y) = T.append (T.concat (map formToAtom xs)) y
--- formToAtom (RSAtom ret) = T.append ret (T.pack " ")
--- formToAtom (RSList xs) = T.concat [ T.pack "L( ", T.concat (map formToAtom xs), T.pack " )L "]
--- formToAtom (RSDotted xs y) = T.concat [ T.pack "D( ", T.append (T.concat (map formToAtom xs)) y, T.pack " )D "]
 
-schDefine :: SchAtom -> SchForm -> SchForm
-schDefine f body = RSList
-  ["define", RSList [RSAtom f], body]
-
-fthWord :: SchAtom -> SchForm -> SchForm
+fthWord :: FthAtom -> FthForm -> FthForm
 fthWord f body
   | countLambdas body == 0 = fthSimpleWord f body
   | otherwise = RSAtom (
@@ -72,72 +65,41 @@ fthWord f body
   "create XT"++ T.unpack f ++" fillHere \n "++
   ":noname" ++ " XT" ++ T.unpack f ++ " foldThunks ; is " ++ T.unpack f))
 
-fthSimpleWord :: SchAtom -> SchForm -> SchForm
+fthSimpleWord :: FthAtom -> FthForm -> FthForm
 fthSimpleWord f body = RSAtom (
   T.pack ("variable XT"++ T.unpack f ++"\n:noname "++ " " ++ T.unpack (formToAtom body) ++
   " ; XT" ++ T.unpack f ++ " !\n:noname" ++ " XT" ++ T.unpack f ++ " @ makeTHUNK ; is " ++ T.unpack f))
 
-fthDefineType :: SchAtom -> Int -> SchAtom -> SchForm
+fthDefineType :: FthAtom -> Int -> FthAtom -> FthForm
 fthDefineType f args body = RSAtom
   (T.concat [T.pack "variable type", f,
   T.pack " 1 cells allot ", T.pack $ show (args + 1), T.pack " type", f, T.pack " !\n", body, "\n", fthPrinter f ," type", f, " 1 cells + !"])
 
-fthPrinter :: SchAtom -> SchAtom
+fthPrinter :: FthAtom -> FthAtom
 fthPrinter f = T.concat [
   ":noname .\" ",
   f,
   " \" ;"
   ]
 
-fthConstructor :: SchAtom -> Int -> SchAtom
+fthConstructor :: FthAtom -> Int -> FthAtom
 fthConstructor f args = formToAtom $ fthSimpleWord f (RSAtom $ T.pack
     (" type" ++ T.unpack f ++  " here "
     ++ show (args + 1) ++ " fillArray here " ++ show (args + 1) ++ " cells allot"))
 
--- >>> :t T.pack "variable"
--- T.pack "variable" :: Text
+fthError :: Text -> FthForm
+fthError msg = RSAtom $ T.pack ("cr .\" " ++ T.unpack msg ++ " \" bye")
 
-schError :: Text -> SchForm
-schError msg = RSList
-  [ "begin"
-  , RSList ["display", RSAtom ("\"" <> msg <> "\\n\"")]
-  , RSList ["exit", "1"]
-  ]
+fthAxiom :: FthAtom -> FthForm
+fthAxiom f = fthWord f $ fthError $ "encountered axiom: " <> f
 
-schAxiom :: SchAtom -> SchForm
-schAxiom f = fthWord f $ schError $ "encountered axiom: " <> f
 
-schLambda :: [SchAtom] -> SchForm -> SchForm
-schLambda args body = RSList
-  [ RSAtom "lambda"
-  , RSList $ map RSAtom args
-  , body
-  ]
-
-fthLocal :: [SchAtom] -> SchForm -> SchForm
+fthLocal :: [FthAtom] -> FthForm -> FthForm
 fthLocal args body = RSAtom $ T.pack $
   "{ " ++ concatMap (\arg -> T.unpack arg ++ " ") args ++ "} " ++ newLine ++ T.unpack (formToAtom body)
 
 
--- fthLambda :: [SchAtom] -> SchForm -> SchForm
--- fthLambda args body = RSAtom $ T.pack $
---   "!LAM! :LAM { " ++ concatMap (\arg -> T.unpack arg ++ " ") args ++ "} " ++ newLine ++ replaceLambda args (addArgs $ T.unpack injected) ++ " LAM;"
---   where
---     replaceLambda (x:xs) ('!':'L':'A':'M':'!':rest) = " !LA " ++ T.unpack x ++ " M! " ++ replaceLambda xs rest
---     replaceLambda xs (y:ys) = y:replaceLambda xs ys
---     replaceLambda xs [] = []
-
---     addArgs ('!':'L':'A':rest) = T.unpack (T.intercalate " " ( reverse args)) ++ " !LA" ++ addPasses rest
---     addArgs (x:xs) = x:addArgs xs
---     addArgs [] = []
-
---     addPasses ('M':'!':rest) = "M! " ++ concatMap (const " pass ") args ++ addArgs rest
---     addPasses (x:xs) = x:addPasses xs
---     addPasses [] = []
-
---     injected = T.replace ":LAM { " (T.append ":LAM { " (T.append (T.intercalate " " args) " ")) (formToAtom body)
-
-fthLambda :: [SchAtom] -> [SchAtom] -> SchForm -> SchForm
+fthLambda :: [FthAtom] -> [FthAtom] -> FthForm -> FthForm
 fthLambda args lambdas body = RSAtom $ T.pack $
   "!LAM! :LAM { " ++ bindings ++ "} " ++ newLine ++ replaceLambda lambdas (addArgs $ T.unpack injected) ++ " LAM;"
   where
@@ -189,7 +151,7 @@ replaceOne text
 countOccurences :: Text -> Text -> Int
 countOccurences t s = sum [ 1 | r <- T.tails s, T.isPrefixOf t r ]
 
-countLambdas :: SchForm -> Int
+countLambdas :: FthForm -> Int
 countLambdas (RSAtom atom) = countOccurences "!LAM!" atom
 countLambdas x = countLambdas (RSAtom (formToAtom x))
 
@@ -198,65 +160,32 @@ countLambdas x = countLambdas (RSAtom (formToAtom x))
 -- 3
 
 -- Bind each argument individually instead of all at once.
-schLambdas :: [SchAtom] -> SchForm -> SchForm
-schLambdas args body = foldr (schLambda . singleton) body args
-
-fthLocals :: [SchAtom] -> SchForm -> SchForm
+fthLocals :: [FthAtom] -> FthForm -> FthForm
 fthLocals args body = foldr (fthLocal . singleton) body args
 
-schApp :: SchForm -> [SchForm] -> SchForm
-schApp f vs = RSList (vs ++ [f])
-
-fthApp :: SchForm -> [SchForm] -> SchForm
+fthApp :: FthForm -> [FthForm] -> FthForm
 fthApp f args = RSList (args ++ [f, " pass "])
 
 -- Apply to each argument individually instead of all at once.
-schApps :: SchForm -> [SchForm] -> SchForm
-schApps = foldl (\x y -> schApp x [y])
-
-fthApps :: SchForm -> [SchForm] -> SchForm
+fthApps :: FthForm -> [FthForm] -> FthForm
 fthApps = foldl (\x y -> fthApp x [y])
 
-fthLet :: [(SchAtom,SchForm)] -> SchForm -> SchForm
+fthLet :: [(FthAtom,FthForm)] -> FthForm -> FthForm
 fthLet binds body = RSAtom $ T.pack $
   concatMap (\(x,v) -> T.unpack (formToAtom v) ++ "{ " ++ T.unpack x ++ " " ++ "} ") binds
   ++ T.unpack (formToAtom body)
+  
+fthConName :: QName -> FthAtom
+fthConName x = T.pack $ prettyShow $ qnameName x
 
-schLet :: [(SchAtom,SchForm)] -> SchForm -> SchForm
-schLet binds body = RSList
-  [ RSAtom "let"
-  , RSList $ map (\(x,v) -> RSList [RSAtom x,v]) binds
-  , body
-  ]
-
-schConName :: QName -> SchAtom
-schConName x = T.pack $ prettyShow $ qnameName x
-
-schConAtom :: QName -> SchAtom
-schConAtom x = T.singleton '\'' <> schConName x
-
-schConApp :: QName -> [SchForm] -> SchForm
-schConApp c vs = RSList $
-  [ RSAtom "'"
-  , RSAtom (schConAtom c)
-  ] ++ vs
-
-schCase :: SchForm -> [SchForm] -> Maybe SchForm -> SchForm
-schCase x cases maybeFallback = RSList $
-  [ RSAtom "record-case"
-  , x
-  ] ++ cases ++
-  [ RSList [ RSAtom "else" , fallback ] | fallback <- maybeToList maybeFallback
-  ]
-
-fthPatternMatch :: SchForm -> [SchForm] -> Maybe SchForm -> SchForm
+fthPatternMatch :: FthForm -> [FthForm] -> Maybe FthForm -> FthForm
 fthPatternMatch x cases maybeFallback  = RSList
   [RSAtom (makeForthy x cases maybeFallback)]
   -- ++
   -- [ RSList [ RSAtom "FALLBACK(?)" , fallback ] | fallback <- maybeToList maybeFallback
   -- ]
     where
-      makeForthy :: SchForm -> [SchForm] -> Maybe SchForm -> SchAtom
+      makeForthy :: FthForm -> [FthForm] -> Maybe FthForm -> FthAtom
       makeForthy arg (RSList [pat, RSList wildcards, expr]:xs) fallback = T.concat [
         T.concat [
           formToAtom arg,
@@ -283,33 +212,19 @@ fthPatternMatch x cases maybeFallback  = RSList
         (makeForthy arg xs fallback)
       makeForthy arg [] fallback = T.concat (map formToAtom (maybeToList fallback))
 
-
-schUnit :: SchForm
-schUnit = RSList [RSAtom "list"]
-
-fthUnit :: SchForm
+fthUnit :: FthForm
 fthUnit = RSList [RSAtom "0"]
 
-schDelay :: SchForm -> SchForm
-schDelay x
-  | RSList [RSAtom "force", y] <- x = y
-  | otherwise                       = RSList [RSAtom "delay", x]
-
-fthDelay :: SchForm -> SchForm
+fthDelay :: FthForm -> FthForm
 fthDelay x
   | RSList [y, RSAtom "dethunk"] <- x = y
   | otherwise                       = RSList [x, RSAtom "makeTHUNK"]
 
-schForce :: SchForm -> SchForm
-schForce x
-  | RSList [RSAtom "delay", y] <- x = y
-  | otherwise                       = RSList [RSAtom "force", x]
-
-fthForce :: SchForm -> SchForm
+fthForce :: FthForm -> FthForm
 fthForce x = RSList [x, RSAtom "deepdethunk"]
 
 
-fthAdd, fthSub, fthMul, fthQuot, fthRem, fthIf, fthEq, fthGeq, fthLt :: SchForm
+fthAdd, fthSub, fthMul, fthQuot, fthRem, fthIf, fthEq, fthGeq, fthLt :: FthForm
 fthAdd  = RSList [RSAtom "add"]
 fthSub  = RSList [RSAtom "sub"]
 fthMul  = RSList [RSAtom "mul"]
@@ -320,7 +235,7 @@ fthEq   = RSList [RSAtom "eq"]
 fthGeq   = RSList [RSAtom "geq"]
 fthLt   = RSList [RSAtom "lt"]
 
-fthPreamble :: ToSchemeM [SchForm]
+fthPreamble :: ToSchemeM [FthForm]
 fthPreamble = do
   force <- makeForce
   return
@@ -340,39 +255,39 @@ fthPreamble = do
 deriving instance Generic EvaluationStrategy
 deriving instance NFData  EvaluationStrategy
 
-data SchOptions = SchOptions
+data FthOptions = FthOptions
   { schEvaluation :: EvaluationStrategy
   }
   deriving (Generic, NFData)
 
 data ToSchemeEnv = ToSchemeEnv
-  { toSchemeOptions :: SchOptions
-  , toSchemeVars    :: [SchAtom]
+  { toSchemeOptions :: FthOptions
+  , toSchemeVars    :: [FthAtom]
   }
 
-initToSchemeEnv :: SchOptions -> ToSchemeEnv
+initToSchemeEnv :: FthOptions -> ToSchemeEnv
 initToSchemeEnv opts = ToSchemeEnv opts []
 
-addVarBinding :: SchAtom -> ToSchemeEnv -> ToSchemeEnv
+addVarBinding :: FthAtom -> ToSchemeEnv -> ToSchemeEnv
 addVarBinding x env = env { toSchemeVars = x : toSchemeVars env }
 
 data ToSchemeState = ToSchemeState
-  { toSchemeFresh     :: [SchAtom]          -- Used for locally bound named variables
-  , toSchemeDefs      :: Map QName SchAtom  -- Used for global definitions
-  , toSchemeUsedNames :: Set SchAtom        -- Names that are already in use (both variables and definitions)
+  { toSchemeFresh     :: [FthAtom]          -- Used for locally bound named variables
+  , toSchemeDefs      :: Map QName FthAtom  -- Used for global definitions
+  , toSchemeUsedNames :: Set FthAtom        -- Names that are already in use (both variables and definitions)
   }
 
 -- This is an infinite supply of variable names
 -- a, b, c, ..., z, a1, b1, ..., z1, a2, b2, ...
 -- We never reuse variable names to make the code easier to
 -- understand.
-freshVars :: [SchAtom]
+freshVars :: [FthAtom]
 freshVars = concat [ map (<> i) xs | i <- "":map (T.pack . show) [1..] ]
   where
     xs = map T.singleton ['a'..'z']
 
 -- These are names that should not be used by the code we generate
-reservedNames :: Set SchAtom
+reservedNames :: Set FthAtom
 reservedNames = Set.fromList $ map T.pack
   [ "loop" , "dethunk" , "obj=" , "obj=?"
   , "deepdethunk" , "print" , "shallowPrint"
@@ -391,27 +306,27 @@ initToSchemeState = ToSchemeState
 
 type ToSchemeM a = StateT ToSchemeState (ReaderT ToSchemeEnv TCM) a
 
-runToSchemeM :: SchOptions -> ToSchemeM a -> TCM a
+runToSchemeM :: FthOptions -> ToSchemeM a -> TCM a
 runToSchemeM opts =
     (`runReaderT` initToSchemeEnv opts)
   . (`evalStateT` initToSchemeState)
 
 
-freshSchAtom :: ToSchemeM SchAtom
-freshSchAtom = do
+freshFthAtom :: ToSchemeM FthAtom
+freshFthAtom = do
   names <- gets toSchemeFresh
   case names of
     [] -> fail "No more variables!"
     (x:names') -> do
       modify $ \st -> st { toSchemeFresh = names' }
-      ifM (isNameUsed x) freshSchAtom $ {-otherwise-} do
+      ifM (isNameUsed x) freshFthAtom $ {-otherwise-} do
         setNameUsed x
         return x
 
 getEvaluationStrategy :: ToSchemeM EvaluationStrategy
 getEvaluationStrategy = reader $ schEvaluation . toSchemeOptions
 
-makeDelay :: ToSchemeM (SchForm -> SchForm)
+makeDelay :: ToSchemeM (FthForm -> FthForm)
 makeDelay = return id
   -- do
   -- strat <- getEvaluationStrategy
@@ -419,7 +334,7 @@ makeDelay = return id
   --   EagerEvaluation -> return id
   --   LazyEvaluation  -> return fthDelay
 
-makeForce :: ToSchemeM (SchForm -> SchForm)
+makeForce :: ToSchemeM (FthForm -> FthForm)
 makeForce = return fthForce
   -- do
   -- strat <- getEvaluationStrategy
@@ -427,26 +342,26 @@ makeForce = return fthForce
   --   EagerEvaluation -> return id
   --   LazyEvaluation  -> return fthForce
 
-getVarName :: Int -> ToSchemeM SchAtom
+getVarName :: Int -> ToSchemeM FthAtom
 getVarName i = reader $ (!! i) . toSchemeVars
 
-withFreshVar :: (SchAtom -> ToSchemeM a) -> ToSchemeM a
+withFreshVar :: (FthAtom -> ToSchemeM a) -> ToSchemeM a
 withFreshVar f = do
-  x <- freshSchAtom
+  x <- freshFthAtom
   local (addVarBinding x) $ f x
 
-withFreshVars :: Int -> ([SchAtom] -> ToSchemeM a) -> ToSchemeM a
+withFreshVars :: Int -> ([FthAtom] -> ToSchemeM a) -> ToSchemeM a
 withFreshVars i f
   | i <= 0    = f []
   | otherwise = withFreshVar $ \x -> withFreshVars (i-1) (f . (x:))
 
-saveDefName :: QName -> SchAtom -> ToSchemeM ()
+saveDefName :: QName -> FthAtom -> ToSchemeM ()
 saveDefName n a = modify $ \s -> s { toSchemeDefs = Map.insert n a (toSchemeDefs s) }
 
-isNameUsed :: SchAtom -> ToSchemeM Bool
+isNameUsed :: FthAtom -> ToSchemeM Bool
 isNameUsed x = gets (Set.member x . toSchemeUsedNames)
 
-setNameUsed :: SchAtom -> ToSchemeM ()
+setNameUsed :: FthAtom -> ToSchemeM ()
 setNameUsed x = modify $ \s ->
   s { toSchemeUsedNames = Set.insert x (toSchemeUsedNames s) }
 
@@ -483,7 +398,7 @@ isValidForthChar x
 
 -- Creates a valid Scheme name from a (qualified) Agda name.
 -- Precondition: the given name is not already in toSchemeDefs.
-makeSchemeName :: QName -> ToSchemeM SchAtom
+makeSchemeName :: QName -> ToSchemeM FthAtom
 makeSchemeName n = do
   a <- go $ fixName $ prettyShow $ qnameName n
   saveDefName n a
@@ -515,14 +430,14 @@ fourBitsToChar i = "0123456789ABCDEF" !! i
 class ToScheme a b where
   toScheme :: a -> ToSchemeM b
 
-instance ToScheme QName SchAtom where
+instance ToScheme QName FthAtom where
   toScheme n = do
     r <- gets (Map.lookup n . toSchemeDefs)
     case r of
       Nothing -> makeSchemeName n
       Just a  -> return a
 
-instance ToScheme Definition (Maybe SchForm) where
+instance ToScheme Definition (Maybe FthForm) where
   toScheme def
     | defNoCompilation def ||
       not (usableModality $ getModality def) = return Nothing
@@ -542,7 +457,7 @@ instance ToScheme Definition (Maybe SchForm) where
           Nothing   -> return Nothing
       Primitive{} -> do
         f' <- toScheme f
-        return $ Just $ schAxiom f' -- TODO!
+        return $ Just $ fthAxiom f' -- TODO!
       PrimitiveSort{} -> return Nothing
       Datatype{} -> return Nothing
       Record{} -> return Nothing
@@ -556,7 +471,7 @@ instance ToScheme Definition (Maybe SchForm) where
       DataOrRecSig{} -> __IMPOSSIBLE__
 
 
-instance ToScheme TTerm SchForm where
+instance ToScheme TTerm FthForm where
   toScheme v = do
     -- v <- liftTCM $ eliminateLiteralPatterns (convertGuards v)
     let (w, args) = tAppView v
@@ -646,7 +561,7 @@ instance ToScheme TTerm SchForm where
     where
       isUnreachable v = v == TError TUnreachable
 
-instance ToScheme TPrim SchForm where
+instance ToScheme TPrim FthForm where
   toScheme p = case p of
     PAdd  -> return fthAdd
     PSub  -> return fthSub
@@ -656,25 +571,25 @@ instance ToScheme TPrim SchForm where
     PIf   -> return fthIf
     PEqI  -> return fthEq
     PGeq  -> return fthGeq
-    _     -> return $ schError $ T.pack $ "not yet supported: primitive " ++ show p
+    _     -> return $ fthError $ T.pack $ "not yet supported: primitive " ++ show p
 
-instance ToScheme Literal SchForm where
+instance ToScheme Literal FthForm where
   toScheme lit = case lit of
     LitNat    x -> return $ RSAtom (T.pack (show x))
-    LitWord64 x -> return $ schError "not yet supported: Word64 literals"
-    LitFloat  x -> return $ schError "not yet supported: Float literals"
-    LitString x -> return $ schError "not yet supported: String literals"
-    LitChar   x -> return $ schError "not yet supported: Char literals"
-    LitQName  x -> return $ schError "not yet supported: QName literals"
-    LitMeta p x -> return $ schError "not yet supported: Meta literals"
+    LitWord64 x -> return $ fthError "not yet supported: Word64 literals"
+    LitFloat  x -> return $ fthError "not yet supported: Float literals"
+    LitString x -> return $ fthError "not yet supported: String literals"
+    LitChar   x -> return $ fthError "not yet supported: Char literals"
+    LitQName  x -> return $ fthError "not yet supported: QName literals"
+    LitMeta p x -> return $ fthError "not yet supported: Meta literals"
 
 
 -- TODO: allow literal branches and guard branches
-instance ToScheme TAlt SchForm where
+instance ToScheme TAlt FthForm where
   toScheme alt = case alt of
     TACon c nargs v -> withFreshVars nargs $ \xs -> do
       body <- toScheme v
-      return $ RSList [RSList [RSAtom (schConName c)], RSList (map RSAtom xs), body]
+      return $ RSList [RSList [RSAtom (fthConName c)], RSList (map RSAtom xs), body]
 
     TAGuard guard body -> do
       guard <- toScheme guard
@@ -686,12 +601,12 @@ instance ToScheme TAlt SchForm where
       body <- toScheme body
       return $ RSList [lit, RSList [], body]
 
-instance ToScheme TError SchForm where
+instance ToScheme TError FthForm where
   toScheme err = case err of
-    TUnreachable -> return $ schError "Panic!"
-    TMeta s      -> return $ schError $ "encountered unsolved meta: " <> T.pack s
+    TUnreachable -> return $ fthError "Panic!"
+    TMeta s      -> return $ fthError $ "encountered unsolved meta: " <> T.pack s
 
-isSpecialConstructor :: QName -> ToSchemeM (Maybe SchForm)
+isSpecialConstructor :: QName -> ToSchemeM (Maybe FthForm)
 isSpecialConstructor c = do
   Con trueCon  _ _ <- primTrue
   Con falseCon _ _ <- primFalse
@@ -699,7 +614,7 @@ isSpecialConstructor c = do
      | c == conName falseCon -> return $ Just $ RSAtom (T.pack $ show 0)
      | otherwise             -> return Nothing
 
-isSpecialDefinition :: QName -> ToSchemeM (Maybe SchForm)
+isSpecialDefinition :: QName -> ToSchemeM (Maybe FthForm)
 isSpecialDefinition f = do
   minusDef <- getBuiltinName builtinNatMinus
   if | Just f == minusDef -> return $ Just $ RSList [RSAtom "monus"]
