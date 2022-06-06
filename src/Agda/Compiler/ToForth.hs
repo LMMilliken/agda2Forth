@@ -263,7 +263,7 @@ fthPatternMatch x cases maybeFallback  = RSList
           T.concat (map (\x -> T.pack "makeWILDCARD ") wildcards ++ [T.pack (init (T.unpack (formToAtom pat)) ++ " ")] ++ map (\x -> T.pack "pass ") wildcards),
           -- T.concat (map (\x -> T.pack "makeWILDCARD ") wildcards ++ [T.pack ( fixName (init $ T.unpack (formToAtom pat)) ++ " ")] ++ map (\x -> T.pack "pass ") wildcards),
           T.pack "0 pointer !",
-          T.concat (T.pack (" obj=? if wildcards " ++ show (length wildcards) ++ " pushArrayN { ") : map formToAtom wildcards ++ [T.pack "} "] ++ [T.pack newLine]),
+          T.concat (T.pack (" obj= if wildcards " ++ show (length wildcards) ++ " pushArrayN { ") : map formToAtom wildcards ++ [T.pack "} "] ++ [T.pack newLine]),
           formToAtom expr
         ],
         T.pack " else ",
@@ -324,7 +324,8 @@ fthPreamble :: ToSchemeM [SchForm]
 fthPreamble = do
   force <- makeForce
   return
-    [ fthSimpleWord "add"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "+"]
+    [ RSAtom "s\" ../lib/loader.fth\" included"
+    , fthSimpleWord "add"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "+"]
     , fthSimpleWord "sub"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "-"]
     , fthSimpleWord "mul"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "*"]
     , fthSimpleWord "quot" $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "/"]
