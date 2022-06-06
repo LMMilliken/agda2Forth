@@ -7,7 +7,6 @@ import Agda.Compiler.Common
 
 import Agda.Main ( runAgda )
 
--- import Agda.Compiler.ToForth
 import Agda.Compiler.ToForth
 
 import Agda.Interaction.Options ( OptDescr(..) , ArgDescr(..) )
@@ -45,7 +44,7 @@ main = runAgda [backend]
 backend :: Backend
 backend = Backend backend'
 
-backend' :: Backend' FthOptions FthOptions () () (Maybe SchForm)
+backend' :: Backend' FthOptions FthOptions () () (Maybe FthForm)
 backend' = Backend'
   { backendName           = "agda2forth"
   , options               = FthOptions EagerEvaluation
@@ -72,10 +71,10 @@ fthFlags =
 fthPreCompile :: FthOptions -> TCM FthOptions
 fthPreCompile = return
 
-fthCompileDef :: FthOptions -> () -> IsMain -> Definition -> TCM (Maybe SchForm)
-fthCompileDef opts _ isMain def = runToForthM opts $ toScheme def
+fthCompileDef :: FthOptions -> () -> IsMain -> Definition -> TCM (Maybe FthForm)
+fthCompileDef opts _ isMain def = runToForthM opts $ toForth def
 
-fthPostModule :: FthOptions -> () -> IsMain -> ModuleName -> [Maybe SchForm] -> TCM ()
+fthPostModule :: FthOptions -> () -> IsMain -> ModuleName -> [Maybe FthForm] -> TCM ()
 fthPostModule opts _ isMain modName defs = do
   preamble <- runToForthM opts fthPreamble
   let defToText = encodeOne printer . fromRich
@@ -94,4 +93,4 @@ fthPostModule opts _ isMain modName defs = do
     printer = basicPrint id
 
 evaluationFlag :: EvaluationStrategy -> Flag FthOptions
-evaluationFlag s o = return $ o { schEvaluation = s }
+evaluationFlag s o = return $ o { fthEvaluation = s }

@@ -235,7 +235,7 @@ fthEq   = RSList [RSAtom "eq"]
 fthGeq   = RSList [RSAtom "geq"]
 fthLt   = RSList [RSAtom "lt"]
 
-fthPreamble :: ToSchemeM [FthForm]
+fthPreamble :: ToForthM [FthForm]
 fthPreamble = do
   force <- makeForce
   return
@@ -256,25 +256,25 @@ deriving instance Generic EvaluationStrategy
 deriving instance NFData  EvaluationStrategy
 
 data FthOptions = FthOptions
-  { schEvaluation :: EvaluationStrategy
+  { fthEvaluation :: EvaluationStrategy
   }
   deriving (Generic, NFData)
 
-data ToSchemeEnv = ToSchemeEnv
-  { toSchemeOptions :: FthOptions
-  , toSchemeVars    :: [FthAtom]
+data ToForthEnv = ToForthEnv
+  { toForthOptions :: FthOptions
+  , toForthVars    :: [FthAtom]
   }
 
-initToSchemeEnv :: FthOptions -> ToSchemeEnv
-initToSchemeEnv opts = ToSchemeEnv opts []
+initToForthEnv :: FthOptions -> ToForthEnv
+initToForthEnv opts = ToForthEnv opts []
 
-addVarBinding :: FthAtom -> ToSchemeEnv -> ToSchemeEnv
-addVarBinding x env = env { toSchemeVars = x : toSchemeVars env }
+addVarBinding :: FthAtom -> ToForthEnv -> ToForthEnv
+addVarBinding x env = env { toForthVars = x : toForthVars env }
 
-data ToSchemeState = ToSchemeState
-  { toSchemeFresh     :: [FthAtom]          -- Used for locally bound named variables
-  , toSchemeDefs      :: Map QName FthAtom  -- Used for global definitions
-  , toSchemeUsedNames :: Set FthAtom        -- Names that are already in use (both variables and definitions)
+data ToForthState = ToForthState
+  { toForthFresh     :: [FthAtom]          -- Used for locally bound named variables
+  , toForthDefs      :: Map QName FthAtom  -- Used for global definitions
+  , toForthUsedNames :: Set FthAtom        -- Names that are already in use (both variables and definitions)
   }
 
 -- This is an infinite supply of variable names
@@ -297,86 +297,75 @@ reservedNames = Set.fromList $ map T.pack
   -- TODO: add more
   ]
 
-initToSchemeState :: ToSchemeState
-initToSchemeState = ToSchemeState
-  { toSchemeFresh     = freshVars
-  , toSchemeDefs      = Map.empty
-  , toSchemeUsedNames = reservedNames
+initToForthState :: ToForthState
+initToForthState = ToForthState
+  { toForthFresh     = freshVars
+  , toForthDefs      = Map.empty
+  , toForthUsedNames = reservedNames
   }
 
-type ToSchemeM a = StateT ToSchemeState (ReaderT ToSchemeEnv TCM) a
+type ToForthM a = StateT ToForthState (ReaderT ToForthEnv TCM) a
 
-runToSchemeM :: FthOptions -> ToSchemeM a -> TCM a
-runToSchemeM opts =
-    (`runReaderT` initToSchemeEnv opts)
-  . (`evalStateT` initToSchemeState)
+runToForthM :: FthOptions -> ToForthM a -> TCM a
+runToForthM opts =
+    (`runReaderT` initToForthEnv opts)
+  . (`evalStateT` initToForthState)
 
-
-freshFthAtom :: ToSchemeM FthAtom
+freshFthAtom :: ToForthM FthAtom
 freshFthAtom = do
-  names <- gets toSchemeFresh
+  names <- gets toForthFresh
   case names of
     [] -> fail "No more variables!"
     (x:names') -> do
-      modify $ \st -> st { toSchemeFresh = names' }
+      modify $ \st -> st { toForthFresh = names' }
       ifM (isNameUsed x) freshFthAtom $ {-otherwise-} do
         setNameUsed x
         return x
 
-getEvaluationStrategy :: ToSchemeM EvaluationStrategy
-getEvaluationStrategy = reader $ schEvaluation . toSchemeOptions
+getEvaluationStrategy :: ToForthM EvaluationStrategy
+getEvaluationStrategy = reader $ fthEvaluation . toForthOptions
 
-makeDelay :: ToSchemeM (FthForm -> FthForm)
+makeDelay :: ToForthM (FthForm -> FthForm)
 makeDelay = return id
-  -- do
-  -- strat <- getEvaluationStrategy
-  -- case strat of
-  --   EagerEvaluation -> return id
-  --   LazyEvaluation  -> return fthDelay
 
-makeForce :: ToSchemeM (FthForm -> FthForm)
+makeForce :: ToForthM (FthForm -> FthForm)
 makeForce = return fthForce
-  -- do
-  -- strat <- getEvaluationStrategy
-  -- case strat of
-  --   EagerEvaluation -> return id
-  --   LazyEvaluation  -> return fthForce
 
-getVarName :: Int -> ToSchemeM FthAtom
-getVarName i = reader $ (!! i) . toSchemeVars
+getVarName :: Int -> ToForthM FthAtom
+getVarName i = reader $ (!! i) . toForthVars
 
-withFreshVar :: (FthAtom -> ToSchemeM a) -> ToSchemeM a
+withFreshVar :: (FthAtom -> ToForthM a) -> ToForthM a
 withFreshVar f = do
   x <- freshFthAtom
   local (addVarBinding x) $ f x
 
-withFreshVars :: Int -> ([FthAtom] -> ToSchemeM a) -> ToSchemeM a
+withFreshVars :: Int -> ([FthAtom] -> ToForthM a) -> ToForthM a
 withFreshVars i f
   | i <= 0    = f []
   | otherwise = withFreshVar $ \x -> withFreshVars (i-1) (f . (x:))
 
-saveDefName :: QName -> FthAtom -> ToSchemeM ()
-saveDefName n a = modify $ \s -> s { toSchemeDefs = Map.insert n a (toSchemeDefs s) }
+saveDefName :: QName -> FthAtom -> ToForthM ()
+saveDefName n a = modify $ \s -> s { toForthDefs = Map.insert n a (toForthDefs s) }
 
-isNameUsed :: FthAtom -> ToSchemeM Bool
-isNameUsed x = gets (Set.member x . toSchemeUsedNames)
+isNameUsed :: FthAtom -> ToForthM Bool
+isNameUsed x = gets (Set.member x . toForthUsedNames)
 
-setNameUsed :: FthAtom -> ToSchemeM ()
+setNameUsed :: FthAtom -> ToForthM ()
 setNameUsed x = modify $ \s ->
-  s { toSchemeUsedNames = Set.insert x (toSchemeUsedNames s) }
+  s { toForthUsedNames = Set.insert x (toForthUsedNames s) }
 
 -- Extended alphabetic characters that are allowed to appear in
--- a Scheme identifier
-schemeExtendedAlphaChars :: Set Char
-schemeExtendedAlphaChars = Set.fromList
+-- a Forth identifier
+forthExtendedAlphaChars :: Set Char
+forthExtendedAlphaChars = Set.fromList
   [ '!' , '$' , '%' , '&' , '*' , '+' , '-' , '.' , '/' , ':' , '<' , '=' , '>'
   , '?' , '@' , '^' , '_' , '~'
   ]
 
 -- Categories of unicode characters that are allowed to appear in
--- a Scheme identifier
-schemeAllowedUnicodeCats :: Set GeneralCategory
-schemeAllowedUnicodeCats = Set.fromList
+-- a Forth identifier
+forthAllowedUnicodeCats :: Set GeneralCategory
+forthAllowedUnicodeCats = Set.fromList
   [ UppercaseLetter , LowercaseLetter , TitlecaseLetter , ModifierLetter
   , OtherLetter , NonSpacingMark , SpacingCombiningMark , EnclosingMark
   , DecimalNumber , LetterNumber , OtherNumber , ConnectorPunctuation
@@ -384,22 +373,17 @@ schemeAllowedUnicodeCats = Set.fromList
   , ModifierSymbol , OtherSymbol , PrivateUse
   ]
 
--- True if the character is allowed to be used in a Scheme identifier
-isValidSchemeChar :: Char -> Bool
-isValidSchemeChar x
-  | isAscii x = isAlphaNum x || x `Set.member` schemeExtendedAlphaChars
-  | otherwise = generalCategory x `Set.member` schemeAllowedUnicodeCats
-
+-- True if the character is allowed to be used in a Forth word
 isValidForthChar :: Char -> Bool
 isValidForthChar x
   =  x /= ' '
   && x /= '\n'
   && x /= '\t'
 
--- Creates a valid Scheme name from a (qualified) Agda name.
--- Precondition: the given name is not already in toSchemeDefs.
-makeSchemeName :: QName -> ToSchemeM FthAtom
-makeSchemeName n = do
+-- Creates a valid Forth name from a (qualified) Agda name.
+-- Precondition: the given name is not already in toForthDefs.
+makeForthName :: QName -> ToForthM FthAtom
+makeForthName n = do
   a <- go $ fixName $ prettyShow $ qnameName n
   saveDefName n a
   setNameUsed a
@@ -427,21 +411,21 @@ fourBitsToChar :: Int -> Char
 fourBitsToChar i = "0123456789ABCDEF" !! i
 {-# INLINE fourBitsToChar #-}
 
-class ToScheme a b where
-  toScheme :: a -> ToSchemeM b
+class ToForth a b where
+  toForth :: a -> ToForthM b
 
-instance ToScheme QName FthAtom where
-  toScheme n = do
-    r <- gets (Map.lookup n . toSchemeDefs)
+instance ToForth QName FthAtom where
+  toForth n = do
+    r <- gets (Map.lookup n . toForthDefs)
     case r of
-      Nothing -> makeSchemeName n
+      Nothing -> makeForthName n
       Just a  -> return a
 
-instance ToScheme Definition (Maybe FthForm) where
-  toScheme def
+instance ToForth Definition (Maybe FthForm) where
+  toForth def
     | defNoCompilation def ||
       not (usableModality $ getModality def) = return Nothing
-  toScheme def = do
+  toForth def = do
     let f = defName def
     case theDef def of
       Axiom{} -> do
@@ -449,21 +433,21 @@ instance ToScheme Definition (Maybe FthForm) where
       GeneralizableVar{} -> return Nothing
       d@Function{} | d ^. funInline -> return Nothing
       Function{} -> do
-        f' <- toScheme f
+        f' <- toForth f
         strat <- getEvaluationStrategy
         maybeCompiled <- liftTCM $ toTreeless strat f
         case maybeCompiled of
-          Just body -> Just . fthWord f' <$> toScheme body
+          Just body -> Just . fthWord f' <$> toForth body
           Nothing   -> return Nothing
       Primitive{} -> do
-        f' <- toScheme f
+        f' <- toForth f
         return $ Just $ fthAxiom f' -- TODO!
       PrimitiveSort{} -> return Nothing
       Datatype{} -> return Nothing
       Record{} -> return Nothing
       Constructor{ conSrcCon = chead, conArity = nargs } -> do
         let c = conName chead
-        c' <- toScheme c
+        c' <- toForth c
         withFreshVars nargs $ \xs ->
           return $ Just $ fthDefineType c' (length xs) (fthConstructor c' (length xs))
 
@@ -471,12 +455,12 @@ instance ToScheme Definition (Maybe FthForm) where
       DataOrRecSig{} -> __IMPOSSIBLE__
 
 
-instance ToScheme TTerm FthForm where
-  toScheme v = do
+instance ToForth TTerm FthForm where
+  toForth v = do
     -- v <- liftTCM $ eliminateLiteralPatterns (convertGuards v)
     let (w, args) = tAppView v
     delay <- makeDelay
-    args' <- map delay <$> traverse toScheme args
+    args' <- map delay <$> traverse toForth args
     let applyToArgs f = return $ fthApps f args'
     case w of
       TVar i -> do
@@ -484,61 +468,61 @@ instance ToScheme TTerm FthForm where
           -- force <- makeForce
           -- applyToArgs $ force $ RSAtom name
           applyToArgs $ RSAtom name
-      TPrim p -> toScheme p >>= applyToArgs
+      TPrim p -> toForth p >>= applyToArgs
       TDef d -> do
         special <- isSpecialDefinition d
         case special of
           Nothing -> do
-            d' <- toScheme d
+            d' <- toForth d
             applyToArgs $ RSList [RSAtom d']
           Just v -> applyToArgs v
       TLam v -> withFreshVar $ \x -> do
         unless (null args) __IMPOSSIBLE__
-        body <- toScheme v
+        body <- toForth v
         withFreshVars (countLambdas body) $ \y -> do
           applyToArgs $ fthLambda [x] y body
       TLit l -> do
         unless (null args) __IMPOSSIBLE__
-        toScheme l
+        toForth l
       TCon c -> do
         special <- isSpecialConstructor c
         case special of
           Nothing -> do
-            c' <- toScheme c
+            c' <- toForth c
             applyToArgs $ RSList [RSAtom c']
           Just v  -> applyToArgs v
       TLet u v -> do
         unless (null args) __IMPOSSIBLE__
-        expr <- toScheme u
+        expr <- toForth u
         withFreshVar $ \x -> do
-          body <- toScheme v
+          body <- toForth v
           applyToArgs $ fthLet [(x,expr)] body
       TCase i info v bs -> do
         unless (null args) __IMPOSSIBLE__
         -- force <- makeForce
         -- x <- force . RSAtom <$> getVarName i
         x <- RSAtom <$> getVarName i
-        cases <- traverse toScheme bs
+        cases <- traverse toForth bs
         -- fallback <- if isUnreachable v
         --     then return Nothing
-        --     else Just <$> toScheme v
+        --     else Just <$> toForth v
         -- applyToArgs $ fthPatternMatch x cases fallback
         special <- isSpecialCase info
         case special of
           Nothing -> do
             fallback <- if isUnreachable v
                         then return Nothing
-                        else Just <$> toScheme v
+                        else Just <$> toForth v
             applyToArgs $ fthPatternMatch x cases fallback
           Just BoolCase -> case bs of
             [] -> __IMPOSSIBLE__
             (TACon c1 _ v1 : bs') -> do
               Con trueC  _ _ <- primTrue
               Con falseC _ _ <- primFalse
-              v1' <- toScheme v1
+              v1' <- toForth v1
               v2' <- case bs' of
-                []                 -> toScheme v
-                (TACon _ _ v2 : _) -> toScheme v2
+                []                 -> toForth v
+                (TACon _ _ v2 : _) -> toForth v2
                 _                  -> __IMPOSSIBLE__
               let (thenBranch,elseBranch)
                     | c1 == conName trueC  = (v1',v2')
@@ -554,15 +538,15 @@ instance ToScheme TTerm FthForm where
         unless (null args) __IMPOSSIBLE__
         return fthUnit
       TErased -> return fthUnit
-      TCoerce u -> applyToArgs =<< toScheme u
-      TError err -> toScheme err
+      TCoerce u -> applyToArgs =<< toForth u
+      TError err -> toForth err
       TApp f args -> __IMPOSSIBLE__
 
     where
       isUnreachable v = v == TError TUnreachable
 
-instance ToScheme TPrim FthForm where
-  toScheme p = case p of
+instance ToForth TPrim FthForm where
+  toForth p = case p of
     PAdd  -> return fthAdd
     PSub  -> return fthSub
     PMul  -> return fthMul
@@ -573,8 +557,8 @@ instance ToScheme TPrim FthForm where
     PGeq  -> return fthGeq
     _     -> return $ fthError $ T.pack $ "not yet supported: primitive " ++ show p
 
-instance ToScheme Literal FthForm where
-  toScheme lit = case lit of
+instance ToForth Literal FthForm where
+  toForth lit = case lit of
     LitNat    x -> return $ RSAtom (T.pack (show x))
     LitWord64 x -> return $ fthError "not yet supported: Word64 literals"
     LitFloat  x -> return $ fthError "not yet supported: Float literals"
@@ -585,28 +569,28 @@ instance ToScheme Literal FthForm where
 
 
 -- TODO: allow literal branches and guard branches
-instance ToScheme TAlt FthForm where
-  toScheme alt = case alt of
+instance ToForth TAlt FthForm where
+  toForth alt = case alt of
     TACon c nargs v -> withFreshVars nargs $ \xs -> do
-      body <- toScheme v
+      body <- toForth v
       return $ RSList [RSList [RSAtom (fthConName c)], RSList (map RSAtom xs), body]
 
     TAGuard guard body -> do
-      guard <- toScheme guard
-      body <- toScheme body
+      guard <- toForth guard
+      body <- toForth body
       return $ RSList [guard, body]
 
     TALit lit body -> do
-      lit <- toScheme lit
-      body <- toScheme body
+      lit <- toForth lit
+      body <- toForth body
       return $ RSList [lit, RSList [], body]
 
-instance ToScheme TError FthForm where
-  toScheme err = case err of
+instance ToForth TError FthForm where
+  toForth err = case err of
     TUnreachable -> return $ fthError "Panic!"
     TMeta s      -> return $ fthError $ "encountered unsolved meta: " <> T.pack s
 
-isSpecialConstructor :: QName -> ToSchemeM (Maybe FthForm)
+isSpecialConstructor :: QName -> ToForthM (Maybe FthForm)
 isSpecialConstructor c = do
   Con trueCon  _ _ <- primTrue
   Con falseCon _ _ <- primFalse
@@ -614,7 +598,7 @@ isSpecialConstructor c = do
      | c == conName falseCon -> return $ Just $ RSAtom (T.pack $ show 0)
      | otherwise             -> return Nothing
 
-isSpecialDefinition :: QName -> ToSchemeM (Maybe FthForm)
+isSpecialDefinition :: QName -> ToForthM (Maybe FthForm)
 isSpecialDefinition f = do
   minusDef <- getBuiltinName builtinNatMinus
   if | Just f == minusDef -> return $ Just $ RSList [RSAtom "monus"]
@@ -624,7 +608,7 @@ isSpecialDefinition f = do
 -- Currently, matches on Bool are translated to an `if` statement.
 data SpecialCase = BoolCase
 
-isSpecialCase :: CaseInfo -> ToSchemeM (Maybe SpecialCase)
+isSpecialCase :: CaseInfo -> ToForthM (Maybe SpecialCase)
 isSpecialCase (CaseInfo lazy (CTData q cty)) = do
   boolTy <- primBool
   if boolTy == Def cty []
