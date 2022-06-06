@@ -5,6 +5,10 @@ id x = x
 
 data Bool : Set where
   true false : Bool
+{-# BUILTIN BOOL  Bool  #-}
+{-# BUILTIN TRUE  true  #-}
+{-# BUILTIN FALSE false #-}
+
 
 not : Bool → Bool
 not true  = false
@@ -36,6 +40,7 @@ pred (suc n) = n
 _+_ : Nat → Nat → Nat
 zero + n = n
 (suc m) + n = suc (m + n)
+
 
 twice : Nat → Nat
 twice zero = zero
@@ -84,3 +89,4 @@ open M (suc (suc zero))
 
 fun : Nat
 fun = fie + foe
+ 
