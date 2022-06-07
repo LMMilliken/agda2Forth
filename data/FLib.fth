@@ -231,8 +231,6 @@ variable pointer
         ." )"
 ;
 
-' print printer !
-
 : thunklessPrint { o1 }
     ." ("
     o1 MAXNUM @ <
