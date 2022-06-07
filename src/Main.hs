@@ -8,7 +8,7 @@ import Agda.Compiler.Common
 import Agda.Main ( runAgda )
 
 import Agda.Compiler.ToForth
-
+-- import Agda.Compiler.FLib
 import Agda.Interaction.Options ( OptDescr(..) , ArgDescr(..) )
 
 import Agda.Syntax.Treeless ( EvaluationStrategy(..) )
