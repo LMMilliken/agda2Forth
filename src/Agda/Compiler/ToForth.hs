@@ -40,7 +40,8 @@ import Data.Text (Text)
 import qualified Data.Text as T
 
 import GHC.Generics ( Generic )
-import System.IO (withFile, IOMode (ReadMode))
+import System.IO
+import Paths_agda2forth
 import Foreign.Marshal.Unsafe (unsafeLocalState)
 
 type FthAtom = Text
@@ -255,7 +256,13 @@ fthPreamble = do
     ]
 
 getFLib :: String
-getFLib = unsafeLocalState $ readFile "../lib/fLib.fth"
+getFLib = unsafeLocalState readFLib
+
+readFLib :: IO String
+readFLib = do 
+  fname <- getDataFileName "FLib.fth"
+  readFile fname
+
 
 deriving instance Generic EvaluationStrategy
 deriving instance NFData  EvaluationStrategy
