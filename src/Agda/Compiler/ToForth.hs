@@ -40,6 +40,8 @@ import Data.Text (Text)
 import qualified Data.Text as T
 
 import GHC.Generics ( Generic )
+import System.IO (withFile, IOMode (ReadMode))
+import Foreign.Marshal.Unsafe (unsafeLocalState)
 
 type FthAtom = Text
 type FthForm = RichSExpr FthAtom
@@ -239,8 +241,8 @@ fthPreamble :: ToForthM [FthForm]
 fthPreamble = do
   force <- makeForce
   return
-    [ RSAtom "s\" ../lib/loader.fth\" included"
-    , fthSimpleWord "add"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "+"]
+    -- [ RSAtom "s\" ../lib/loader.fth\" included"
+    [ fthSimpleWord "add"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "+"]
     , fthSimpleWord "sub"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "-"]
     , fthSimpleWord "mul"  $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "*"]
     , fthSimpleWord "quot" $ fthLocals ["m","n"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "m"), force (RSAtom "n"), RSAtom "/"]
@@ -251,6 +253,9 @@ fthPreamble = do
     , fthSimpleWord "lt"   $ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "x"), force (RSAtom "y"), RSAtom "<"]
     , fthSimpleWord "monus"$ fthLocals ["x","y"] $ RSAtom $ formToAtom $ RSList [force (RSAtom "y x sub pass pass"),  RSAtom "dup 0 < if drop 0 then"]
     ]
+
+getFLib :: String
+getFLib = unsafeLocalState $ readFile "../lib/fLib.fth"
 
 deriving instance Generic EvaluationStrategy
 deriving instance NFData  EvaluationStrategy

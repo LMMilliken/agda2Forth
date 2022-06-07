@@ -78,13 +78,15 @@ fthPostModule :: FthOptions -> () -> IsMain -> ModuleName -> [Maybe FthForm] -> 
 fthPostModule opts _ isMain modName defs = do
   preamble <- runToForthM opts fthPreamble
   let defToText = encodeOne printer . fromRich
-      modText   = makeDefines
-        (T.intercalate "\n\n" $
-        map (
-            fixWord .
-            defToText
-        )
-          (preamble ++ catMaybes defs))
+      modText   = T.append 
+        (T.pack getFLib) 
+        (makeDefines
+          (T.intercalate "\n\n" $
+          map (
+              fixWord .
+              defToText
+          )
+            (preamble ++ catMaybes defs)))
       fileName  = prettyShow (last $ mnameToList modName) ++ ".fth"
   liftIO $ T.writeFile fileName modText
 
