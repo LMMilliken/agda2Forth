@@ -567,6 +567,7 @@ instance ToForth TPrim FthForm where
     PIf   -> return fthIf
     PEqI  -> return fthEq
     PGeq  -> return fthGeq
+    PLt   -> return fthLt
     _     -> return $ fthError $ T.pack $ "not yet supported: primitive " ++ show p
 
 instance ToForth Literal FthForm where
