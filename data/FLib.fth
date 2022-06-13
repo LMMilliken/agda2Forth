@@ -335,3 +335,24 @@ variable pointer
             @ swap @ =                                  ( 0/-1 )
         then
 ;
+
+: fastConsume ( n -- 0 )
+    BEGIN
+        dup 0 = if
+            EXIT
+        then
+        1 -
+    AGAIN
+;
+
+: fastPow2 ( n -- 2^n )
+    1 swap  ( 1 n -- 2^n )
+    BEGIN   ( m n -- m * 2^n )
+        dup 0 =
+        if
+            drop
+            EXIT
+        then
+        swap 2 * swap 1 -
+    AGAIN
+;
