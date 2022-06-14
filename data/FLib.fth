@@ -369,7 +369,9 @@ variable pointer
     AGAIN
 ;
 
-: mid ( l r -- mid ) over - 2/ -1 cells and + ;
+: cell- -1 cells ;
+
+: mid ( l r -- mid ) over - 2/ cell- and + ;
  
 : exch ( addr1 addr2 -- ) dup @ >r over @ swap ! r> swap ! ;
  
