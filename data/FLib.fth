@@ -356,3 +356,37 @@ variable pointer
         swap 2 * swap 1 -
     AGAIN
 ;
+
+: fastRange ( n -- [addr of arr n] )
+    here swap
+    BEGIN   ( addr n )
+    dup 0 = if  ( addr n )
+        ,       ( addr )
+        EXIT
+    then
+    dup ,       ( addr n )
+    1 -         ( addr n-1 )
+    AGAIN
+;
+
+: mid ( l r -- mid ) over - 2/ -cell and + ;
+ 
+: exch ( addr1 addr2 -- ) dup @ >r over @ swap ! r> swap ! ;
+ 
+: partition ( l r -- l r r2 l2 )
+  2dup mid @ >r ( r: pivot )
+  2dup begin
+    swap begin dup @  r@ < while cell+ repeat
+    swap begin r@ over @ < while cell- repeat
+    2dup <= if 2dup exch >r cell+ r> cell- then
+  2dup > until  r> drop ;
+ 
+: fastQsort ( l r -- )
+  partition  swap rot
+  \ 2over 2over - + < if 2swap then
+  2dup < if recurse else 2drop then
+  2dup < if recurse else 2drop then ;
+ 
+: fastSort ( array len -- )
+  dup 2 < if 2drop exit then
+  1- cells over + qsort ;
