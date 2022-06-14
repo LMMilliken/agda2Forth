@@ -391,4 +391,4 @@ variable pointer
  
 : fastSort ( array len -- )
   dup 2 < if 2drop exit then
-  1- cells over + qsort ;
+  1- cells over + fastQsort ;
