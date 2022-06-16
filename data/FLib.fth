@@ -293,8 +293,10 @@ variable pointer
             EXIT
         then                    ( o1 o2 )
     then                    ( o1 o2 )
-        deepdethunk                                ( o1 o22 )
-        swap deepdethunk                           ( o22 o11 )
+        \ deepdethunk                                ( o1 o22 )
+        dethunk                                ( o1 o22 )
+        \ swap deepdethunk                           ( o22 o11 )
+        swap dethunk                           ( o22 o11 )
         dup MAXNUM @ <  ( o22 o11 0/-1 )
         rot             ( o11 0/-1 o22 )
         dup MAXNUM @ <  ( o11 0/-1 o22 0/-1 )

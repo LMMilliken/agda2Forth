@@ -85,12 +85,12 @@ defer obj=?
         then                    ( o1 o2 )
     then                    ( o1 o2 )
         \ ." ------------- " \ cr
-        deepdethunk                                ( o1 o22 )
-        \ dethunk                                ( o1 o22 )
+        \ deepdethunk                                ( o1 o22 )
+        dethunk                                ( o1 o22 )
         \ dup shallowPrint \ cr
         \ ." ------------- " \ cr
-        swap deepdethunk                           ( o22 o11 )
-        \ swap dethunk                           ( o22 o11 )
+        \ swap deepdethunk                           ( o22 o11 )
+        swap dethunk                           ( o22 o11 )
         \ cr ." post dethunk, "
         \ cr ." o1 = " swap dup shallowprint \ cr ." o2 = " swap dup shallowprint \ cr .s
         \ cr ." dethunked both " .s
